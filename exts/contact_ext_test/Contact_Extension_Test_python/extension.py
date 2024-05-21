@@ -70,7 +70,7 @@ class ContactExtension(omni.ext.IExt):
         add_menu_items(self._menu_items, EXTENSION_TITLE)
 
         # Filled in with User Functions
-        self.ui_builder = UIBuilder()
+        self.ui_builder = UIBuilder(self._window)
 
         # Events
         self._usd_context = omni.usd.get_context()
@@ -78,6 +78,9 @@ class ContactExtension(omni.ext.IExt):
         self._physx_subscription = None
         self._stage_event_sub = None
         self._timeline = omni.timeline.get_timeline_interface()
+        
+
+        
 
     def on_shutdown(self):
         self._models = {}
@@ -158,3 +161,21 @@ class ContactExtension(omni.ext.IExt):
     def _build_extension_ui(self):
         # Call user function for building UI
         self.ui_builder.build_ui()
+
+    def _on_update(self, dt):
+        if self._timeline.is_playing() and self.ui_builder.sliders:
+            slider_num = 0
+            for s in self.ui_builder.sensors.values():
+                reading = self._cs.get_sensor_reading(s.path)
+                if reading.is_valid:
+                    self.sliders[slider_num].model.set_value(
+                        float(reading.value) * self.meters_per_unit
+                    )  # readings are in kg⋅m⋅s−2, converting to Newtons
+                else:
+                    self.sliders[slider_num].model.set_value(0)
+
+                slider_num += 1
+            # contacts_raw = self._cs.get_body_contact_raw_data(self.leg_paths[0])
+            # if len(contacts_raw):
+            #     c = contacts_raw[0]
+            #     # print(c)

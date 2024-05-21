@@ -12,11 +12,12 @@ import numpy as np
 import omni.timeline
 import omni.ui as ui
 import omni.kit.commands
+import time
 from omni.isaac.core.articulations import Articulation
 from omni.isaac.core.objects.cuboid import FixedCuboid
 from omni.isaac.core.prims import XFormPrim
 from omni.isaac.core.utils.nucleus import get_assets_root_path
-from omni.isaac.core.utils.prims import is_prim_path_valid, get_all_matching_child_prims, delete_prim
+from omni.isaac.core.utils.prims import is_prim_path_valid, get_all_matching_child_prims, delete_prim, get_prim_children
 from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
 from omni.isaac.core.world import World
 from omni.isaac.ui.element_wrappers import CollapsableFrame, StateButton, Button, TextBlock, StringField
@@ -24,12 +25,17 @@ from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButt
 from omni.isaac.ui.ui_utils import get_style, LABEL_WIDTH
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux, Gf
+from omni.isaac.sensor import _sensor
 
 from .scenario import ExampleScenario
 
 
 class UIBuilder:
-    def __init__(self):
+    def __init__(self, window):
+
+        # Window to hold the UI elements
+        self.window = window
+
         # Frames are sub-windows that can contain multiple UI elements
         self.frames = []
         # UI elements created using a UIElementWrapper instance
@@ -39,9 +45,19 @@ class UIBuilder:
         self._timeline = omni.timeline.get_timeline_interface()
 
         self.parent_paths = []
+        self.sensors = {}
 
-        # Run initialization for the provided example
-        #self._on_init()
+        # Contact Parameters
+        self.meters_per_unit = 1.00
+
+    # Data structure to store sensor information
+    class Sensor:
+        def __init__(self, name, position, radius, parent_path):
+            self.name = name
+            self.position = position
+            self.radius = radius
+            self.parent_path = parent_path
+            self.path = parent_path + "/tact_sensor_" + name
 
 
     ###################################################################################
@@ -75,7 +91,7 @@ class UIBuilder:
         Args:
             step (float): Size of physics step
         """
-        pass
+        self.contact_sensor_update(step)
 
     def on_stage_event(self, event):
         """Callback for Stage Events
@@ -108,26 +124,31 @@ class UIBuilder:
                     include_copy_button=True,
                 )
 
-    def create_sensor_readings_frame(self):
+    def update_sensor_readings_frame(self):
 
         # Color and style for the UI elements
         self.sliders = []
         self.colors = [0xFFBBBBFF, 0xFFBBFFBB, 0xBBFFBBBB, 0xBBBBFFFF]
         style = {"background_color": 0xFF888888, "color": 0xFF333333, "secondary_color": self.colors[0]}
+        #message = "There are " + str(len(self.sensors)) + " sensors\n"
 
-        # Create a new frame that shows the sensors readings of the contact sensors
-        sensor_readings_frame = CollapsableFrame("Sensor Readings", collapsed=False)
-
-        with sensor_readings_frame:
+        with self.sensor_readings_frame:
             # Vertical stack to hold the sensor readings in the frame
             with ui.VStack(style=get_style(), spacing=5, height=0):
-                with ui.HStack():
-                    ui.Label("Sensor 1", width=LABEL_WIDTH, tooltip="Force in Newtons")
-                    # ui.Spacer(height=0, width=10)
-                    style["secondary_color"] = self.colors[0]
-                    self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
-                    self.sliders[-1].enabled = False
-                    ui.Spacer(width=20)
+                for s in self.sensors.values():
+                    #message += "Creating reading bar for sensor " + s.name + "...\n"
+                    with ui.HStack():
+                        ui.Label(s.name, width=LABEL_WIDTH, tooltip="Force in Newtons")
+                        # ui.Spacer(height=0, width=10)
+                        style["secondary_color"] = self.colors[0]
+                        self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
+                        self.sliders[-1].enabled = False
+                        ui.Spacer(width=20)
+
+        #self._status_report_field.set_text(message)
+
+    def create_sensor_readings_frame(self):
+        self.sensor_readings_frame = CollapsableFrame("Sensor Readings", collapsed=False)
 
     def create_import_sensors_frame(self):
         buttons_frame = CollapsableFrame("Import Sensors", collapsed=False)
@@ -157,7 +178,7 @@ class UIBuilder:
 
                 self._status_report_field = TextBlock(
                     "Import Status",
-                    num_lines=20,
+                    num_lines=10,
                     tooltip="Outputs the status of the import process",
                     include_copy_button=True,
                 )
@@ -168,9 +189,11 @@ class UIBuilder:
         This function will be called any time the UI window is closed and reopened.
         """
 
-        self.create_sensor_readings_frame()
+        self._cs = _sensor.acquire_contact_sensor_interface()
 
         self.create_import_sensors_frame()
+
+        self.create_sensor_readings_frame()
 
         #self.create_status_report_frame()
 
@@ -195,8 +218,9 @@ class UIBuilder:
 
         #Import the sensor data from the CSV file
         try:
-            names, positions, parent_paths, data = self.import_csv(path)
+            names, positions, radii, parent_paths, data = self.import_csv(path)
             self.parent_paths = parent_paths
+            self.remove_sensors() # Second call to ensure all sensors are removed after parent paths are updated
             message += "File opened successfully\n"
 
             # Output the data to the status report field
@@ -214,13 +238,26 @@ class UIBuilder:
         for i in range(num_sensors):
 
             # Create a contact sensor at the specified position
-            message += "\nCreating sensor " + str(i) + " at position " + str(positions[i]) + "...\n"
-            self._status_report_field.set_text(message)
-            self.create_sensor(parent_paths[i], positions[i], names[i])
+            # message += "\nCreating sensor " + str(i) + " at position " + str(positions[i]) + "...\n"
+            # self._status_report_field.set_text(message)
+            self.create_sensor(parent_paths[i], positions[i], radii[i], names[i])
 
         message += "\nSuccessfully created " + str(num_sensors) + " sensors\n"
         self._status_report_field.set_text(message)
 
+        # Populate the sensor readings frame with the new sensors
+        self.update_sensor_readings_frame()
+
+
+
+    # This function breaks down the CSV file into its components. Make sure the CSV file is formatted correctly
+    #
+    # The CSV file should be formatted as follows:
+    #   - The first row should contain the names of the sensors
+    #   - The second row should contain the x, y, and z positions of the sensors
+    #   - The third row should contain the radii of the sensors
+    #   - The fourth row should contain the parent paths of the sensors
+    #
     def import_csv(self, path):
         """
         Function that imports data from a CSV file
@@ -239,29 +276,35 @@ class UIBuilder:
             for i in range(len(data)):
                 positions.append(Gf.Vec3d(float(data[i, 1]), float(data[i, 2]), float(data[i, 3])))
 
+            radii = []
+            for i in range(len(data)):
+                radii.append(float(data[i, 4]))
+
             # Save the parent paths as a list of strings
             parent_paths = []
             for i in range(len(data)):
-                parent_paths.append(data[i, 4])
+                parent_paths.append(data[i, 5])
 
-
-            return names, positions, parent_paths, data
+            return names, positions, radii, parent_paths, data
         except:
             return None
         
-    def create_sensor(self, parent_path, position, name):
+    def create_sensor(self, parent_path, position, radius, name):
         result, sensor = omni.kit.commands.execute(
             "IsaacSensorCreateContactSensor",
-            path="/tact_sensor",
+            path="/tact_sensor_" + name,
             parent=parent_path,
             min_threshold=0,
             max_threshold=10000000,
             color=(1, 0, 0, 1),
-            radius=0.2,
+            radius=radius,
             sensor_period=-1,
             translation=position,
             visualize=True,
         )
+
+        # Add the sensor to the list of sensors
+        self.sensors[name] = self.Sensor(name, position, radius, parent_path)
 
     def remove_sensors(self):
         """
@@ -272,12 +315,42 @@ class UIBuilder:
         
         for parent_path in self.parent_paths:
             # For all "IsaacContactSensor" objects with "tact_sensor" in their name under the parent path, remove them
-            omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/tact_sensor"])
+            #omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/tact_sensor"])
 
-            # list_of_prims = get_all_matching_child_prims('/', ["tact_sensor")
-            # for prim in list_of_prims:
-            #     delete_prim(prim)
+            # Find all prims under the parent path that contain "tact_sensor" in their name
+            parent_prim = get_current_stage().GetPrimAtPath(parent_path)
+            prims = get_prim_children(parent_prim)
 
+            #self._status_report_field.set_text("Found " + str(len(prims)) + " sensors to remove\n")
+
+            # Remove all prims found
+            for prim in prims:
+                if "tact_sensor" in prim.GetName():
+                    omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/" + prim.GetName()])
+
+
+    ######################################################################################
+    # Contact updates
+    ######################################################################################
+    # This function updates the sensor readings in the UI at every physics step
+    def contact_sensor_update(self, dt):
+        #self._status_report_field.set_text("Updating sensor readings...\n")
+        if len(self.sliders) > 0:
+            slider_num = 0
+            for s in self.sensors.values():
+                reading = self._cs.get_sensor_reading(s.path)
+                if reading.is_valid:
+                    self.sliders[slider_num].model.set_value(
+                        float(reading.value) * self.meters_per_unit
+                    )  # readings are in kg⋅m⋅s−2, converting to Newtons
+                else:
+                    self.sliders[slider_num].model.set_value(0)
+
+                slider_num += 1
+            # contacts_raw = self._cs.get_body_contact_raw_data(self.leg_paths[0])
+            # if len(contacts_raw):
+            #     c = contacts_raw[0]
+            #     # print(c)
 
 
     ######################################################################################
