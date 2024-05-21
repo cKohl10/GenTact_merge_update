@@ -13,6 +13,7 @@ import omni.timeline
 import omni.ui as ui
 import omni.kit.commands
 import time
+import os
 from omni.isaac.core.articulations import Articulation
 from omni.isaac.core.objects.cuboid import FixedCuboid
 from omni.isaac.core.prims import XFormPrim
@@ -20,7 +21,7 @@ from omni.isaac.core.utils.nucleus import get_assets_root_path
 from omni.isaac.core.utils.prims import is_prim_path_valid, get_all_matching_child_prims, delete_prim, get_prim_children
 from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
 from omni.isaac.core.world import World
-from omni.isaac.ui.element_wrappers import CollapsableFrame, StateButton, Button, TextBlock, StringField
+from omni.isaac.ui.element_wrappers import CollapsableFrame, StateButton, Button, TextBlock, StringField, DropDown
 from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButton
 from omni.isaac.ui.ui_utils import get_style, LABEL_WIDTH
 from omni.usd import StageEventType
@@ -81,8 +82,9 @@ class UIBuilder:
             # For complete robustness, the user should resolve those edge cases here
             # In general, for extensions based off this template, there is no value to having the user click the play/stop
             # button instead of using the Load/Reset/Run buttons provided.
-            self._scenario_state_btn.reset()
-            self._scenario_state_btn.enabled = False
+            #self._scenario_state_btn.reset()
+            #self._scenario_state_btn.enabled = False
+            pass
 
     def on_physics_step(self, step: float):
         """Callback for Physics Step.
@@ -158,15 +160,24 @@ class UIBuilder:
 
                 string_field = StringField(
                     "Import CSV File",
-                    default_value="TactileSim/sensor_configs/single_sensor_test.csv",
+                    default_value="TactileSim/sensor_configs",
                     tooltip="Path to sensor positioning file",
                     read_only=False,
                     multiline_okay=False,
-                    #on_value_changed_fn=self._on_string_field_value_changed_fn,
+                    on_value_changed_fn=self._on_string_field_value_changed_fn,
                     use_folder_picker=True,
                     #item_filter_fn=is_usd_or_python_path,
                 )
                 self.wrapped_ui_elements.append(string_field)
+
+                dropdown = DropDown(
+                    "Config Options",
+                    tooltip=" Select an option from the DropDown",
+                    populate_fn=self.dropdown_populate_fn,
+                    on_selection_fn=self._on_dropdown_item_selection,
+                )
+                self.wrapped_ui_elements.append(dropdown)
+                dropdown.repopulate()  # This does not happen automatically, and it triggers the on_selection_fn
 
                 button = Button(
                     "Refresh Sensor Positions",
@@ -197,7 +208,25 @@ class UIBuilder:
 
         #self.create_status_report_frame()
 
-    ############################## Supporting Functions ########################################
+    ############################## Import Frame Functions ########################################
+    def dropdown_populate_fn(self):
+        """
+        Function that populates the dropdown with options
+        Returns all the files in the directory specified by the string field
+        """
+        options = []
+
+        # Get the path from the string field
+        path = self.wrapped_ui_elements[0].get_value()
+
+        # Get all the files in the directory
+        try:
+            options = os.listdir(path)
+        except:
+            options = []
+
+        return options
+    
     def import_sensors_fn(self):
         """
         Function that executes when the user clicks the 'Refresh Sensors' button
@@ -212,7 +241,7 @@ class UIBuilder:
         self._status_report_field.set_text(message)
 
         #Change the text of the status report field to show the import status
-        path = self.wrapped_ui_elements[0].get_value()
+        path = self.config_path
         message += "Importing sensor data from '" + path + "'...\n"
         self._status_report_field.set_text(message)
 
@@ -230,6 +259,8 @@ class UIBuilder:
 
         except:
             message += "Invalid file path or file format!"
+            self._status_report_field.set_text(message)
+            return
 
         self._status_report_field.set_text(message)
 
@@ -328,6 +359,20 @@ class UIBuilder:
                 if "tact_sensor" in prim.GetName():
                     omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/" + prim.GetName()])
 
+    def _on_string_field_value_changed_fn(self, value):
+        """
+        Function that executes when the user changes the value of the string field
+        Sets the value of the string field to what the user entered
+        """
+        self.wrapped_ui_elements[0].set_value(value)
+
+    def _on_dropdown_item_selection(self, item):
+        """
+        Function that executes when the user selects an item from the dropdown
+        Sets the value of the dropdown to the item the user selected
+        """
+        self.config_path = self.wrapped_ui_elements[0].get_value() + "/" + item
+        pass
 
     ######################################################################################
     # Contact updates
