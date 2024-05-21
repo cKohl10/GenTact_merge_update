@@ -1,0 +1,5 @@
+SensorNum, RelX, RelY, RelZ, path
+1,0,0,0,/Ant/Arm_01/Upper_Arm
+2,0,0,0,/Ant/Arm_02/Upper_Arm
+3,0,0,0,/Ant/Arm_03/Upper_Arm
+4,0,0,0,/Ant/Arm_04/Upper_Arm

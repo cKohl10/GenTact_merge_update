@@ -11,18 +11,19 @@
 import numpy as np
 import omni.timeline
 import omni.ui as ui
+import omni.kit.commands
 from omni.isaac.core.articulations import Articulation
 from omni.isaac.core.objects.cuboid import FixedCuboid
 from omni.isaac.core.prims import XFormPrim
 from omni.isaac.core.utils.nucleus import get_assets_root_path
-from omni.isaac.core.utils.prims import is_prim_path_valid
+from omni.isaac.core.utils.prims import is_prim_path_valid, get_all_matching_child_prims, delete_prim
 from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
 from omni.isaac.core.world import World
 from omni.isaac.ui.element_wrappers import CollapsableFrame, StateButton, Button, TextBlock, StringField
 from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButton
 from omni.isaac.ui.ui_utils import get_style, LABEL_WIDTH
 from omni.usd import StageEventType
-from pxr import Sdf, UsdLux
+from pxr import Sdf, UsdLux, Gf
 
 from .scenario import ExampleScenario
 
@@ -37,8 +38,11 @@ class UIBuilder:
         # Get access to the timeline to control stop/pause/play programmatically
         self._timeline = omni.timeline.get_timeline_interface()
 
+        self.parent_paths = []
+
         # Run initialization for the provided example
-        self._on_init()
+        #self._on_init()
+
 
     ###################################################################################
     #           The Functions Below Are Called Automatically By extension.py
@@ -133,7 +137,7 @@ class UIBuilder:
 
                 string_field = StringField(
                     "Import CSV File",
-                    default_value="Path to CSV file",
+                    default_value="TactileSim/sensor_configs/single_sensor_test.csv",
                     tooltip="Path to sensor positioning file",
                     read_only=False,
                     multiline_okay=False,
@@ -144,16 +148,16 @@ class UIBuilder:
                 self.wrapped_ui_elements.append(string_field)
 
                 button = Button(
-                    "Refresh Sensors",
+                    "Refresh Sensor Positions",
                     "Update",
                     tooltip="Reread the data from the specified file path to update sensors",
-                    #on_click_fn=self._on_button_clicked_fn,
+                    on_click_fn=self.import_sensors_fn,
                 )
                 self.wrapped_ui_elements.append(button)
 
                 self._status_report_field = TextBlock(
                     "Import Status",
-                    num_lines=3,
+                    num_lines=20,
                     tooltip="Outputs the status of the import process",
                     include_copy_button=True,
                 )
@@ -170,143 +174,249 @@ class UIBuilder:
 
         #self.create_status_report_frame()
 
+    ############################## Supporting Functions ########################################
+    def import_sensors_fn(self):
+        """
+        Function that executes when the user clicks the 'Refresh Sensors' button
+        """
+
+        # Remove all sensors already on the robot
+        message = "Removing existing sensors...\n"
+        self._status_report_field.set_text(message)
+        self.remove_sensors()
+
+        message += "Sensors successfully removed\n\n"
+        self._status_report_field.set_text(message)
+
+        #Change the text of the status report field to show the import status
+        path = self.wrapped_ui_elements[0].get_value()
+        message += "Importing sensor data from '" + path + "'...\n"
+        self._status_report_field.set_text(message)
+
+        #Import the sensor data from the CSV file
+        try:
+            names, positions, parent_paths, data = self.import_csv(path)
+            self.parent_paths = parent_paths
+            message += "File opened successfully\n"
+
+            # Output the data to the status report field
+            # message += "\n\nSensor Data:\n"
+            # for i in range(len(names)):
+            #     message += str(data[i]) + "\n"
+
+        except:
+            message += "Invalid file path or file format!"
+
+        self._status_report_field.set_text(message)
+
+        # Determine the number of sensors and their positions
+        num_sensors = len(data)
+        for i in range(num_sensors):
+
+            # Create a contact sensor at the specified position
+            message += "\nCreating sensor " + str(i) + " at position " + str(positions[i]) + "...\n"
+            self._status_report_field.set_text(message)
+            self.create_sensor(parent_paths[i], positions[i], names[i])
+
+        message += "\nSuccessfully created " + str(num_sensors) + " sensors\n"
+        self._status_report_field.set_text(message)
+
+    def import_csv(self, path):
+        """
+        Function that imports data from a CSV file
+
+        Args:
+            path (str): The path to the CSV file
+        """
+        try:
+            data = np.genfromtxt(path, delimiter=',', skip_header=1, dtype=str)
+            
+            # Save the first column as a list of names, the 2-4th columns as a list of positions, and the 5th column as a list of parent paths
+            names = data[:, 0]
+
+            # Convert the positions to a list of Gf.Vec3d objects
+            positions = []
+            for i in range(len(data)):
+                positions.append(Gf.Vec3d(float(data[i, 1]), float(data[i, 2]), float(data[i, 3])))
+
+            # Save the parent paths as a list of strings
+            parent_paths = []
+            for i in range(len(data)):
+                parent_paths.append(data[i, 4])
+
+
+            return names, positions, parent_paths, data
+        except:
+            return None
+        
+    def create_sensor(self, parent_path, position, name):
+        result, sensor = omni.kit.commands.execute(
+            "IsaacSensorCreateContactSensor",
+            path="/tact_sensor",
+            parent=parent_path,
+            min_threshold=0,
+            max_threshold=10000000,
+            color=(1, 0, 0, 1),
+            radius=0.2,
+            sensor_period=-1,
+            translation=position,
+            visualize=True,
+        )
+
+    def remove_sensors(self):
+        """
+        Function that removes all sensors from the robot
+        """
+        if len(self.parent_paths) == 0:
+            return
+        
+        for parent_path in self.parent_paths:
+            # For all "IsaacContactSensor" objects with "tact_sensor" in their name under the parent path, remove them
+            omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/tact_sensor"])
+
+            # list_of_prims = get_all_matching_child_prims('/', ["tact_sensor")
+            # for prim in list_of_prims:
+            #     delete_prim(prim)
+
+
+
     ######################################################################################
     # Functions Below This Point Support The Provided Example And Can Be Deleted/Replaced
     ######################################################################################
 
-    def _on_init(self):
-        self._articulation = None
-        self._cuboid = None
-        self._scenario = ExampleScenario()
+    # def _on_init(self):
+    #     self._articulation = None
+    #     self._cuboid = None
+    #     self._scenario = ExampleScenario()
 
-    def _add_light_to_stage(self):
-        """
-        A new stage does not have a light by default.  This function creates a spherical light
-        """
-        sphereLight = UsdLux.SphereLight.Define(get_current_stage(), Sdf.Path("/World/SphereLight"))
-        sphereLight.CreateRadiusAttr(2)
-        sphereLight.CreateIntensityAttr(100000)
-        XFormPrim(str(sphereLight.GetPath())).set_world_pose([6.5, 0, 12])
+    # def _add_light_to_stage(self):
+    #     """
+    #     A new stage does not have a light by default.  This function creates a spherical light
+    #     """
+    #     sphereLight = UsdLux.SphereLight.Define(get_current_stage(), Sdf.Path("/World/SphereLight"))
+    #     sphereLight.CreateRadiusAttr(2)
+    #     sphereLight.CreateIntensityAttr(100000)
+    #     XFormPrim(str(sphereLight.GetPath())).set_world_pose([6.5, 0, 12])
 
-    def _setup_scene(self):
-        """
-        This function is attached to the Load Button as the setup_scene_fn callback.
-        On pressing the Load Button, a new instance of World() is created and then this function is called.
-        The user should now load their assets onto the stage and add them to the World Scene.
+    # def _setup_scene(self):
+    #     """
+    #     This function is attached to the Load Button as the setup_scene_fn callback.
+    #     On pressing the Load Button, a new instance of World() is created and then this function is called.
+    #     The user should now load their assets onto the stage and add them to the World Scene.
 
-        In this example, a new stage is loaded explicitly, and all assets are reloaded.
-        If the user is relying on hot-reloading and does not want to reload assets every time,
-        they may perform a check here to see if their desired assets are already on the stage,
-        and avoid loading anything if they are.  In this case, the user would still need to add
-        their assets to the World (which has low overhead).  See commented code section in this function.
-        """
-        # Load the UR10e
-        robot_prim_path = "/ur10e"
-        path_to_robot_usd = get_assets_root_path() + "/Isaac/Robots/UniversalRobots/ur10e/ur10e.usd"
+    #     In this example, a new stage is loaded explicitly, and all assets are reloaded.
+    #     If the user is relying on hot-reloading and does not want to reload assets every time,
+    #     they may perform a check here to see if their desired assets are already on the stage,
+    #     and avoid loading anything if they are.  In this case, the user would still need to add
+    #     their assets to the World (which has low overhead).  See commented code section in this function.
+    #     """
+    #     # Load the UR10e
+    #     robot_prim_path = "/ur10e"
+    #     path_to_robot_usd = get_assets_root_path() + "/Isaac/Robots/UniversalRobots/ur10e/ur10e.usd"
 
-        # Do not reload assets when hot reloading.  This should only be done while extension is under development.
-        # if not is_prim_path_valid(robot_prim_path):
-        #     create_new_stage()
-        #     add_reference_to_stage(path_to_robot_usd, robot_prim_path)
-        # else:
-        #     print("Robot already on Stage")
+    #     # Do not reload assets when hot reloading.  This should only be done while extension is under development.
+    #     # if not is_prim_path_valid(robot_prim_path):
+    #     #     create_new_stage()
+    #     #     add_reference_to_stage(path_to_robot_usd, robot_prim_path)
+    #     # else:
+    #     #     print("Robot already on Stage")
 
-        create_new_stage()
-        self._add_light_to_stage()
-        add_reference_to_stage(path_to_robot_usd, robot_prim_path)
+    #     create_new_stage()
+    #     self._add_light_to_stage()
+    #     add_reference_to_stage(path_to_robot_usd, robot_prim_path)
 
-        # Create a cuboid
-        self._cuboid = FixedCuboid(
-            "/Scenario/cuboid", position=np.array([0.3, 0.3, 0.5]), size=0.05, color=np.array([255, 0, 0])
-        )
+    #     # Create a cuboid
+    #     self._cuboid = FixedCuboid(
+    #         "/Scenario/cuboid", position=np.array([0.3, 0.3, 0.5]), size=0.05, color=np.array([255, 0, 0])
+    #     )
 
-        self._articulation = Articulation(robot_prim_path)
+    #     self._articulation = Articulation(robot_prim_path)
 
-        # Add user-loaded objects to the World
-        world = World.instance()
-        world.scene.add(self._articulation)
-        world.scene.add(self._cuboid)
+    #     # Add user-loaded objects to the World
+    #     world = World.instance()
+    #     world.scene.add(self._articulation)
+    #     world.scene.add(self._cuboid)
 
-    def _setup_scenario(self):
-        """
-        This function is attached to the Load Button as the setup_post_load_fn callback.
-        The user may assume that their assets have been loaded by their setup_scene_fn callback, that
-        their objects are properly initialized, and that the timeline is paused on timestep 0.
+    # def _setup_scenario(self):
+    #     """
+    #     This function is attached to the Load Button as the setup_post_load_fn callback.
+    #     The user may assume that their assets have been loaded by their setup_scene_fn callback, that
+    #     their objects are properly initialized, and that the timeline is paused on timestep 0.
 
-        In this example, a scenario is initialized which will move each robot joint one at a time in a loop while moving the
-        provided prim in a circle around the robot.
-        """
-        self._reset_scenario()
+    #     In this example, a scenario is initialized which will move each robot joint one at a time in a loop while moving the
+    #     provided prim in a circle around the robot.
+    #     """
+    #     self._reset_scenario()
 
-        # UI management
-        self._scenario_state_btn.reset()
-        self._scenario_state_btn.enabled = True
-        self._reset_btn.enabled = True
+    #     # UI management
+    #     self._scenario_state_btn.reset()
+    #     self._scenario_state_btn.enabled = True
+    #     self._reset_btn.enabled = True
 
-    def _reset_scenario(self):
-        self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._articulation, self._cuboid)
+    # def _reset_scenario(self):
+    #     self._scenario.teardown_scenario()
+    #     self._scenario.setup_scenario(self._articulation, self._cuboid)
 
-    def _on_post_reset_btn(self):
-        """
-        This function is attached to the Reset Button as the post_reset_fn callback.
-        The user may assume that their objects are properly initialized, and that the timeline is paused on timestep 0.
+    # def _on_post_reset_btn(self):
+    #     """
+    #     This function is attached to the Reset Button as the post_reset_fn callback.
+    #     The user may assume that their objects are properly initialized, and that the timeline is paused on timestep 0.
 
-        They may also assume that objects that were added to the World.Scene have been moved to their default positions.
-        I.e. the cube prim will move back to the position it was in when it was created in self._setup_scene().
-        """
-        self._reset_scenario()
+    #     They may also assume that objects that were added to the World.Scene have been moved to their default positions.
+    #     I.e. the cube prim will move back to the position it was in when it was created in self._setup_scene().
+    #     """
+    #     self._reset_scenario()
 
-        # UI management
-        self._scenario_state_btn.reset()
-        self._scenario_state_btn.enabled = True
+    #     # UI management
+    #     self._scenario_state_btn.reset()
+    #     self._scenario_state_btn.enabled = True
 
-    def _update_scenario(self, step: float):
-        """This function is attached to the Run Scenario StateButton.
-        This function was passed in as the physics_callback_fn argument.
-        This means that when the a_text "RUN" is pressed, a subscription is made to call this function on every physics step.
-        When the b_text "STOP" is pressed, the physics callback is removed.
+    # def _update_scenario(self, step: float):
+    #     """This function is attached to the Run Scenario StateButton.
+    #     This function was passed in as the physics_callback_fn argument.
+    #     This means that when the a_text "RUN" is pressed, a subscription is made to call this function on every physics step.
+    #     When the b_text "STOP" is pressed, the physics callback is removed.
 
-        Args:
-            step (float): The dt of the current physics step
-        """
-        self._scenario.update_scenario(step)
+    #     Args:
+    #         step (float): The dt of the current physics step
+    #     """
+    #     self._scenario.update_scenario(step)
 
-    def _on_run_scenario_a_text(self):
-        """
-        This function is attached to the Run Scenario StateButton.
-        This function was passed in as the on_a_click_fn argument.
-        It is called when the StateButton is clicked while saying a_text "RUN".
+    # def _on_run_scenario_a_text(self):
+    #     """
+    #     This function is attached to the Run Scenario StateButton.
+    #     This function was passed in as the on_a_click_fn argument.
+    #     It is called when the StateButton is clicked while saying a_text "RUN".
 
-        This function simply plays the timeline, which means that physics steps will start happening.  After the world is loaded or reset,
-        the timeline is paused, which means that no physics steps will occur until the user makes it play either programmatically or
-        through the left-hand UI toolbar.
-        """
-        self._timeline.play()
+    #     This function simply plays the timeline, which means that physics steps will start happening.  After the world is loaded or reset,
+    #     the timeline is paused, which means that no physics steps will occur until the user makes it play either programmatically or
+    #     through the left-hand UI toolbar.
+    #     """
+    #     self._timeline.play()
 
-    def _on_run_scenario_b_text(self):
-        """
-        This function is attached to the Run Scenario StateButton.
-        This function was passed in as the on_b_click_fn argument.
-        It is called when the StateButton is clicked while saying a_text "STOP"
+    # def _on_run_scenario_b_text(self):
+    #     """
+    #     This function is attached to the Run Scenario StateButton.
+    #     This function was passed in as the on_b_click_fn argument.
+    #     It is called when the StateButton is clicked while saying a_text "STOP"
 
-        Pausing the timeline on b_text is not strictly necessary for this example to run.
-        Clicking "STOP" will cancel the physics subscription that updates the scenario, which means that
-        the robot will stop getting new commands and the cube will stop updating without needing to
-        pause at all.  The reason that the timeline is paused here is to prevent the robot being carried
-        forward by momentum for a few frames after the physics subscription is canceled.  Pausing here makes
-        this example prettier, but if curious, the user should observe what happens when this line is removed.
-        """
-        self._timeline.pause()
+    #     Pausing the timeline on b_text is not strictly necessary for this example to run.
+    #     Clicking "STOP" will cancel the physics subscription that updates the scenario, which means that
+    #     the robot will stop getting new commands and the cube will stop updating without needing to
+    #     pause at all.  The reason that the timeline is paused here is to prevent the robot being carried
+    #     forward by momentum for a few frames after the physics subscription is canceled.  Pausing here makes
+    #     this example prettier, but if curious, the user should observe what happens when this line is removed.
+    #     """
+    #     self._timeline.pause()
 
-    def _reset_extension(self):
-        """This is called when the user opens a new stage from self.on_stage_event().
-        All state should be reset.
-        """
-        self._on_init()
-        self._reset_ui()
+    # def _reset_extension(self):
+    #     """This is called when the user opens a new stage from self.on_stage_event().
+    #     All state should be reset.
+    #     """
+    #     self._on_init()
+    #     self._reset_ui()
 
-    def _reset_ui(self):
-        self._scenario_state_btn.reset()
-        self._scenario_state_btn.enabled = False
-        self._reset_btn.enabled = False
+    # def _reset_ui(self):
+    #     self._scenario_state_btn.reset()
+    #     self._scenario_state_btn.enabled = False
+    #     self._reset_btn.enabled = False
