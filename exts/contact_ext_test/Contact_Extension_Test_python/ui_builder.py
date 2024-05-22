@@ -266,6 +266,7 @@ class UIBuilder:
 
         # Determine the number of sensors and their positions
         num_sensors = len(data)
+        self.sensors = {}
         for i in range(num_sensors):
 
             # Create a contact sensor at the specified position
