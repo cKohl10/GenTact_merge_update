@@ -1,0 +1,14 @@
+SensorNum,RelX,RelY,RelZ,Radius,path
+0,0,0,0,0.6,/Ant/Sphere
+1,0,0,0,0.12,/Ant/Arm_01/Upper_Arm
+2,0,0,0,0.12,/Ant/Arm_02/Upper_Arm
+3,0,0,0,0.12,/Ant/Arm_03/Upper_Arm
+4,0,0,0,0.12,/Ant/Arm_04/Upper_Arm
+5,0,0,0,0.12,/Ant/Arm_01/Lower_Arm
+6,0,0,0,0.12,/Ant/Arm_02/Lower_Arm
+7,0,0,0,0.12,/Ant/Arm_03/Lower_Arm
+8,0,0,0,0.12,/Ant/Arm_04/Lower_Arm
+9,40,0,0,0.12,/Ant/Arm_01/Lower_Arm
+10,40,0,0,0.12,/Ant/Arm_02/Lower_Arm
+11,40,0,0,0.12,/Ant/Arm_03/Lower_Arm
+12,40,0,0,0.12,/Ant/Arm_04/Lower_Arm

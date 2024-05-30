@@ -222,6 +222,12 @@ class UIBuilder:
         # Get all the files in the directory
         try:
             options = os.listdir(path)
+
+            # Add an empty string to the beginning of the list
+            options.insert(0, "")
+
+            # Add a 'Go Back' option at the end of the list
+            options.append("Go Back")
         except:
             options = []
 
@@ -259,6 +265,7 @@ class UIBuilder:
 
         except:
             message += "Invalid file path or file format!"
+            message += "\nPlease make sure the file has at least 2 sensors and is formatted correctly.\n"
             self._status_report_field.set_text(message)
             return
 
@@ -267,14 +274,23 @@ class UIBuilder:
         # Determine the number of sensors and their positions
         num_sensors = len(data)
         self.sensors = {}
+        sensor_count = 0 # Keep track of the number of sensors created successfully
         for i in range(num_sensors):
 
             # Create a contact sensor at the specified position
             # message += "\nCreating sensor " + str(i) + " at position " + str(positions[i]) + "...\n"
             # self._status_report_field.set_text(message)
-            self.create_sensor(parent_paths[i], positions[i], radii[i], names[i])
 
-        message += "\nSuccessfully created " + str(num_sensors) + " sensors\n"
+            # Check if the parent path is valid
+            if not is_prim_path_valid(parent_paths[i]):
+                message += "Could not find parent path: " + parent_paths[i] + "\n"
+                self._status_report_field.set_text(message)
+                continue
+            
+            self.create_sensor(parent_paths[i], positions[i], radii[i], names[i])
+            sensor_count = sensor_count + 1
+
+        message += "\nSuccessfully created " + str(sensor_count) + " sensors\n"
         self._status_report_field.set_text(message)
 
         # Populate the sensor readings frame with the new sensors
@@ -346,12 +362,14 @@ class UIBuilder:
             return
         
         for parent_path in self.parent_paths:
-            # For all "IsaacContactSensor" objects with "tact_sensor" in their name under the parent path, remove them
-            #omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/tact_sensor"])
 
             # Find all prims under the parent path that contain "tact_sensor" in their name
-            parent_prim = get_current_stage().GetPrimAtPath(parent_path)
-            prims = get_prim_children(parent_prim)
+            try:
+                parent_prim = get_current_stage().GetPrimAtPath(parent_path)
+                prims = get_prim_children(parent_prim)
+            except:
+                self._status_report_field.set_text("Unexpected path!\n")
+                return
 
             #self._status_report_field.set_text("Found " + str(len(prims)) + " sensors to remove\n")
 
@@ -367,12 +385,34 @@ class UIBuilder:
         """
         self.wrapped_ui_elements[0].set_value(value)
 
+        # Update the dropdown with the new path
+        self.wrapped_ui_elements[1].repopulate()
+
     def _on_dropdown_item_selection(self, item):
         """
         Function that executes when the user selects an item from the dropdown
         Sets the value of the dropdown to the item the user selected
         """
+
+        # Go back if the user selects the empty string
+        if item == "Go Back":
+            # Get the path from the string field minus the last folder
+            path = self.wrapped_ui_elements[0].get_value()
+            parts = path.split("/")
+            path = "/".join(parts[:-1])
+            self.wrapped_ui_elements[0].set_value(path)
+            self.wrapped_ui_elements[1].repopulate()
+            return
+        
+        if item == "":
+            return 
+        
         self.config_path = self.wrapped_ui_elements[0].get_value() + "/" + item
+
+        if self.config_path[-4:] != ".csv":
+            # If the user selects a file that is not a CSV file, and it is a folder, update the string field with the new path
+            self.wrapped_ui_elements[0].set_value(self.config_path)
+            self.wrapped_ui_elements[1].repopulate()
         pass
 
     ######################################################################################
