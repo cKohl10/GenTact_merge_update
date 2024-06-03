@@ -17,6 +17,9 @@ import os
 import re
 from bpy.utils import resource_path
 from pathlib import Path
+from bpy_extras.io_utils import ExportHelper
+from bpy.props import StringProperty
+from bpy.types import Operator
 
 class SensorData:
     def __init__(self, pos, radius, parent):
@@ -30,16 +33,24 @@ class SensorData:
     def __repr__(self):
         return str(self)
 
-def check_children_for_sensors(obj, attribute_name, sensor_data, parent_path):
+def check_children_for_sensors(obj, parent_path):
+
+    sensor_data = []
 
     # Get the parent path from the root object
     parent_path = parent_path + "/" + obj.name
 
+    is_sensor_attribtue_name = "is_sensor"
+    pos_attribute_name = "sensor_pos"
+    rad_attribute_name = "radii"
+    default_radius = False
+
     # Loop through all of the children objects and search for GeometryNodes modifier
     for child in obj.children:
+        pos_attribute_data = []
 
         # Recursively check the children for sensors
-        check_children_for_sensors(child, attribute_name, sensor_data, parent_path)
+        sensor_data = check_children_for_sensors(child, sensor_data, parent_path)
 
         # Loop through all of the children objects and search for GeometryNodes modifier
         #print(f"\nChecking object {child.name} under {parent_path}...")
@@ -54,47 +65,66 @@ def check_children_for_sensors(obj, attribute_name, sensor_data, parent_path):
         eval_obj = child.evaluated_get(depsgraph)
         mesh = eval_obj.to_mesh()
         
-        # Check if the attribute exists
-        if attribute_name not in mesh.attributes:
+        # Check if the position data exists
+        if pos_attribute_name not in mesh.attributes:
             #print(f"Attribute {attribute_name} not found in object {child.name}.")
             # for other_name in mesh.attributes:
             #     print(f"Found attribute: {other_name}.")
             continue
-        
+
+        if is_sensor_attribtue_name not in mesh.attributes:
+            #print(f"Attribute {is_sensor_attribtue_name} not found in object {child.name}.")
+            continue
+
+        if rad_attribute_name not in mesh.attributes:
+            #Set a default radius value if the radii attribute is not found
+            print(f"Attribute {rad_attribute_name} not found in object {child.name}. Setting default radius of 0.1.")
+            default_radius = True
+
         # Get the attribute data
-        attribute_data = mesh.attributes[attribute_name].data
-        # Remove all zero vectors
-        attribute_data = [element for element in attribute_data if element.vector.length > 0]
+
+        pos_attribute_data = mesh.attributes[pos_attribute_name].data
+
+        # Get the radii attribute data
+        rad_attribute_data = []
+        if not default_radius:
+            rad_attribute_data = mesh.attributes[rad_attribute_name].data
+
+        is_sensor_data = mesh.attributes[is_sensor_attribtue_name].data
 
         # Get path to object
         parent_path = parent_path + "/" + child.name
         # Remove any triple digit numbers from the parent path
-        parent_path = re.sub(r'(?<=\.)\d{3,}', '', parent_path)
+        parent_path = re.sub(r'\.\d{3,}', '', parent_path)
 
         # Add the attribute data to the sensor data list
-        for element in attribute_data:
-            sensor_data.append(SensorData(element.vector, 0.1, parent_path))
+        for i in range(len(pos_attribute_data)):
+            if is_sensor_data[i].value:
+                if default_radius:
+                    sensor_data.append(SensorData(pos_attribute_data[i].vector, 0.1, parent_path))
+                else:
+                    sensor_data.append(SensorData(pos_attribute_data[i].vector, rad_attribute_data[i].value, parent_path))
 
-        print(f"Found {len(attribute_data)} sensor positions in object {child.name}.")
+        print(f"Found {len(pos_attribute_data)} sensor positions in object {child.name}.")
 
         # Clean up
         eval_obj.to_mesh_clear()
 
+        return sensor_data
 
-def save_attribute_to_csv(context):
+
+def save_attribute_to_csv(context, file_path):
     # Get the object
     obj = context.object
-    attribute_name = "sensor_pos"
-    file_path = "~/TactileSim/sensor_configs/UR10/second_model.csv"  # Modify this to a valid path
 
     # Expand the ~ symbol into the path of the home directory
-    file_path = os.path.expanduser(file_path)
+    #file_path = os.path.expanduser(file_path)
 
     # Make an array of all sensor positions,radii, and parent paths
     sensor_data = []
     
     # Check the children for sensors
-    check_children_for_sensors(obj, attribute_name, sensor_data, "")
+    sensor_data = check_children_for_sensors(obj, "")
 
     # Check if there are any sensor positions
     if len(sensor_data) == 0:
@@ -110,18 +140,34 @@ def save_attribute_to_csv(context):
             pos = element.pos
             csv_writer.writerow([i, pos.x, pos.y, pos.z, element.radius, element.parent])
     
-    print(f"\nAttribute {attribute_name} saved to {file_path}")
+    # print(f"\nAttribute {attribute_name} saved to {file_path}")
     print(f"Sensor count: {len(sensor_data)}")
 
-class SensorSaveOperator(bpy.types.Operator):
+class SensorSaveOperator(Operator, ExportHelper):
     """Saves the sensors in the scene"""
     bl_idname = "object.save_sensors_operator"
     bl_label = "Save Sensor Positions"
+
+    filename_ext = ".csv"
+    filter_glob: StringProperty(
+        default="*.csv",
+        options={'HIDDEN'},
+        maxlen=255,  # Max internal buffer length, longer would be clamped.
+    )
     
     def execute(self, context):
         print("SensorSaveOperator.execute called\n")
-        save_attribute_to_csv(context)
+        if self.filepath:  # Check if filepath has been set
+            save_attribute_to_csv(context, self.filepath)
+        else:
+            self.report({'WARNING'}, "No file selected")  # Report a warning if no file was selected
+            return {'CANCELLED'}
         return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)  # Open file explorer
+        return {'RUNNING_MODAL'}
+
 
 class SensorPanel(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""

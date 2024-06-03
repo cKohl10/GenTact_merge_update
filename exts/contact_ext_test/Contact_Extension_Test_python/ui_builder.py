@@ -171,6 +171,16 @@ class UIBuilder:
                     )
                     self.wrapped_ui_elements.append(button)
 
+                # Add a remove sensors button to all supported sensor operators
+                for operator in self._sensor_operators:
+                    button = Button(
+                        "Remove " + operator.sensor_description,
+                        "Remove All",
+                        tooltip="Remove all sensors " + operator.sensor_description + " from the robot",
+                        on_click_fn=operator.remove_sensors_fn,
+                    )
+                    self.wrapped_ui_elements.append(button)
+
                 self._status_report_field = TextBlock(
                     "Import Status",
                     num_lines=10,
@@ -277,10 +287,28 @@ class UIBuilder:
 
         return
 
-    # def _on_init(self):
-    #     self._articulation = None
-    #     self._cuboid = None
-    #     self._scenario = ExampleScenario()
+    def _on_init(self):
+        # Frames are sub-windows that can contain multiple UI elements
+        self.frames = []
+        # UI elements created using a UIElementWrapper instance
+        self.wrapped_ui_elements = []
+
+        # Get access to the timeline to control stop/pause/play programmatically
+        self._timeline = omni.timeline.get_timeline_interface()
+
+        # Create a list to hold all sensor operators
+        self._sensor_operators = []
+
+        ############### Add Sensor Operators Here ################
+        self._sensor_operators.append(ContactSensorOperator()) # Add a contact sensor operator
+        #########################################################
+    
+
+        # Debugging
+        # version = sys.version
+        # executable = sys.executable
+        # print(f"Python version: {version}")
+        # print(f"Python executable location: {executable}")
 
     # def _add_light_to_stage(self):
     #     """
@@ -409,7 +437,14 @@ class UIBuilder:
         self._on_init()
         self._reset_ui()
 
-    # def _reset_ui(self):
-    #     self._scenario_state_btn.reset()
-    #     self._scenario_state_btn.enabled = False
-    #     self._reset_btn.enabled = False
+    def _reset_ui(self):
+        """This function is called by _reset_extension() to reset the UI to its initial state.
+        This function should not reset the state of the extension, only the UI.
+        """
+        for frame in self.frames:
+            frame.delete()
+
+        self.frames = []
+        self.wrapped_ui_elements = []
+
+        self.build_ui()

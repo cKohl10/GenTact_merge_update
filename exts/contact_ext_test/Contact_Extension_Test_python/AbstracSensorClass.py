@@ -19,15 +19,9 @@ class AbstractSensorOperator:
         """
         pass
 
-    def remove_sensors(self):
+    def remove_sensors_fn(self):
         """
         Function that removes all sensors from the robot
-        """
-        pass
-
-    def import_csv(self, path):
-        """
-        Function that imports the sensor data from a CSV file
         """
         pass
 

@@ -185,6 +185,16 @@ class ContactSensorOperator(AbstractSensorOperator):
                 if "tact_sensor" in prim.GetName():
                     omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/" + prim.GetName()])
 
+    def remove_sensors_fn(self):
+        """
+        Function that executes when the user clicks the 'Remove Sensors' button
+        Removes all sensors from the robot
+        """
+        self.activated = False
+
+        self.remove_sensors()
+        self._status_report_field.set_text("All sensors removed\n\n\n If sensors remain, choose the correct configuration file and click 'Update'\n")
+
     # This function updates the sensor readings in the UI at every physics step
     def sensor_update(self, dt):
         #self._status_report_field.set_text("Updating sensor readings...\n")
