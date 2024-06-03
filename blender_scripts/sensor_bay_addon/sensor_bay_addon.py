@@ -42,11 +42,11 @@ def check_children_for_sensors(obj, attribute_name, sensor_data, parent_path):
         check_children_for_sensors(child, attribute_name, sensor_data, parent_path)
 
         # Loop through all of the children objects and search for GeometryNodes modifier
-        print(f"\nChecking object {child.name} under {parent_path}...")
+        #print(f"\nChecking object {child.name} under {parent_path}...")
 
         # Ensure the object has geometry nodes modifier
-        if child.modifiers.get('GeometryNodes') is None:
-            print(f"{child.name} does not have a GeometryNodes modifier.")
+        if child.modifiers.get('Skin') is None:
+            #print(f"{child.name} does not have a Skin modifier.")
             continue
 
         # Get the evaluated geometry
@@ -56,7 +56,7 @@ def check_children_for_sensors(obj, attribute_name, sensor_data, parent_path):
         
         # Check if the attribute exists
         if attribute_name not in mesh.attributes:
-            print(f"Attribute {attribute_name} not found in object {child.name}.")
+            #print(f"Attribute {attribute_name} not found in object {child.name}.")
             # for other_name in mesh.attributes:
             #     print(f"Found attribute: {other_name}.")
             continue
@@ -69,7 +69,7 @@ def check_children_for_sensors(obj, attribute_name, sensor_data, parent_path):
         # Get path to object
         parent_path = parent_path + "/" + child.name
         # Remove any triple digit numbers from the parent path
-        parent_path = re.sub(r'.\d{3,}', '', parent_path)
+        parent_path = re.sub(r'(?<=\.)\d{3,}', '', parent_path)
 
         # Add the attribute data to the sensor data list
         for element in attribute_data:
@@ -85,7 +85,7 @@ def save_attribute_to_csv(context):
     # Get the object
     obj = context.object
     attribute_name = "sensor_pos"
-    file_path = "~/TactileSim/sensor_configs/FRANKA/sensor_positions.csv"  # Modify this to a valid path
+    file_path = "~/TactileSim/sensor_configs/UR10/second_model.csv"  # Modify this to a valid path
 
     # Expand the ~ symbol into the path of the home directory
     file_path = os.path.expanduser(file_path)

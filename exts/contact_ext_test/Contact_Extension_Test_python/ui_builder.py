@@ -8,27 +8,29 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
+from .AbstracSensorClass import AbstractSensorOperator
+from .ContactSensorClass import ContactSensorOperator
+
 import numpy as np
 import omni.timeline
 import omni.ui as ui
 import omni.kit.commands
 import time
 import os
-from omni.isaac.core.articulations import Articulation
-from omni.isaac.core.objects.cuboid import FixedCuboid
-from omni.isaac.core.prims import XFormPrim
-from omni.isaac.core.utils.nucleus import get_assets_root_path
+import sys
+import carb
 from omni.isaac.core.utils.prims import is_prim_path_valid, get_all_matching_child_prims, delete_prim, get_prim_children
 from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
 from omni.isaac.core.world import World
 from omni.isaac.ui.element_wrappers import CollapsableFrame, StateButton, Button, TextBlock, StringField, DropDown
-from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButton
 from omni.isaac.ui.ui_utils import get_style, LABEL_WIDTH
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux, Gf
 from omni.isaac.sensor import _sensor
+#from omni.isaac.proximity_sensor import Sensor, register_sensor, clear_sensors
 
 from .scenario import ExampleScenario
+from pxr import UsdPhysics
 
 
 class UIBuilder:
@@ -45,20 +47,19 @@ class UIBuilder:
         # Get access to the timeline to control stop/pause/play programmatically
         self._timeline = omni.timeline.get_timeline_interface()
 
-        self.parent_paths = []
-        self.sensors = {}
+        # Create a list to hold all sensor operators
+        self._sensor_operators = []
 
-        # Contact Parameters
-        self.meters_per_unit = 1.00
+        ############### Add Sensor Operators Here ################
+        self._sensor_operators.append(ContactSensorOperator()) # Add a contact sensor operator
+        #########################################################
+    
 
-    # Data structure to store sensor information
-    class Sensor:
-        def __init__(self, name, position, radius, parent_path):
-            self.name = name
-            self.position = position
-            self.radius = radius
-            self.parent_path = parent_path
-            self.path = parent_path + "/tact_sensor_" + name
+        # Debugging
+        # version = sys.version
+        # executable = sys.executable
+        # print(f"Python version: {version}")
+        # print(f"Python executable location: {executable}")
 
 
     ###################################################################################
@@ -93,7 +94,10 @@ class UIBuilder:
         Args:
             step (float): Size of physics step
         """
-        self.contact_sensor_update(step)
+        
+        # Update the sensor readings for all added sensors
+        for operator in self._sensor_operators:
+            operator.sensor_update(step)
 
     def on_stage_event(self, event):
         """Callback for Stage Events
@@ -126,31 +130,9 @@ class UIBuilder:
                     include_copy_button=True,
                 )
 
-    def update_sensor_readings_frame(self):
-
-        # Color and style for the UI elements
-        self.sliders = []
-        self.colors = [0xFFBBBBFF, 0xFFBBFFBB, 0xBBFFBBBB, 0xBBBBFFFF]
-        style = {"background_color": 0xFF888888, "color": 0xFF333333, "secondary_color": self.colors[0]}
-        #message = "There are " + str(len(self.sensors)) + " sensors\n"
-
-        with self.sensor_readings_frame:
-            # Vertical stack to hold the sensor readings in the frame
-            with ui.VStack(style=get_style(), spacing=5, height=0):
-                for s in self.sensors.values():
-                    #message += "Creating reading bar for sensor " + s.name + "...\n"
-                    with ui.HStack():
-                        ui.Label(s.name, width=LABEL_WIDTH, tooltip="Force in Newtons")
-                        # ui.Spacer(height=0, width=10)
-                        style["secondary_color"] = self.colors[0]
-                        self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
-                        self.sliders[-1].enabled = False
-                        ui.Spacer(width=20)
-
-        #self._status_report_field.set_text(message)
-
-    def create_sensor_readings_frame(self):
-        self.sensor_readings_frame = CollapsableFrame("Sensor Readings", collapsed=False)
+        #link the status report frame to the sensor operators to allow them to update the status report
+        for operator in self._sensor_operators:
+            operator._status_report_field = self._status_report_field
 
     def create_import_sensors_frame(self):
         buttons_frame = CollapsableFrame("Import Sensors", collapsed=False)
@@ -179,13 +161,15 @@ class UIBuilder:
                 self.wrapped_ui_elements.append(dropdown)
                 dropdown.repopulate()  # This does not happen automatically, and it triggers the on_selection_fn
 
-                button = Button(
-                    "Refresh Sensor Positions",
-                    "Update",
-                    tooltip="Reread the data from the specified file path to update sensors",
-                    on_click_fn=self.import_sensors_fn,
-                )
-                self.wrapped_ui_elements.append(button)
+                # Add a button to all supported sensor operators
+                for operator in self._sensor_operators:
+                    button = Button(
+                        "Refresh " + operator.sensor_description,
+                        "Update",
+                        tooltip="Reread the data from the specified file path to update sensors",
+                        on_click_fn=operator.import_sensors_fn,
+                    )
+                    self.wrapped_ui_elements.append(button)
 
                 self._status_report_field = TextBlock(
                     "Import Status",
@@ -194,19 +178,23 @@ class UIBuilder:
                     include_copy_button=True,
                 )
 
+                # Add the status report field to the sensor operators
+                for operator in self._sensor_operators:
+                    operator._status_report_field = self._status_report_field
+
+    def create_all_sensor_readings_frames(self):
+        # Create a sensor readings frame for each sensor operator
+        for operator in self._sensor_operators:
+            operator.create_sensor_readings_frame()
+
     def build_ui(self):
         """
         Build a custom UI tool to run your extension.
         This function will be called any time the UI window is closed and reopened.
         """
 
-        self._cs = _sensor.acquire_contact_sensor_interface()
-
         self.create_import_sensors_frame()
-
-        self.create_sensor_readings_frame()
-
-        #self.create_status_report_frame()
+        #self.create_all_sensor_readings_frames()
 
     ############################## Import Frame Functions ########################################
     def dropdown_populate_fn(self):
@@ -232,151 +220,6 @@ class UIBuilder:
             options = []
 
         return options
-    
-    def import_sensors_fn(self):
-        """
-        Function that executes when the user clicks the 'Refresh Sensors' button
-        """
-
-        # Remove all sensors already on the robot
-        message = "Removing existing sensors...\n"
-        self._status_report_field.set_text(message)
-        self.remove_sensors()
-
-        message += "Sensors successfully removed\n\n"
-        self._status_report_field.set_text(message)
-
-        #Change the text of the status report field to show the import status
-        path = self.config_path
-        message += "Importing sensor data from '" + path + "'...\n"
-        self._status_report_field.set_text(message)
-
-        #Import the sensor data from the CSV file
-        try:
-            names, positions, radii, parent_paths, data = self.import_csv(path)
-            self.parent_paths = parent_paths
-            self.remove_sensors() # Second call to ensure all sensors are removed after parent paths are updated
-            message += "File opened successfully\n"
-
-            # Output the data to the status report field
-            # message += "\n\nSensor Data:\n"
-            # for i in range(len(names)):
-            #     message += str(data[i]) + "\n"
-
-        except:
-            message += "Invalid file path or file format!"
-            message += "\nPlease make sure the file has at least 2 sensors and is formatted correctly.\n"
-            self._status_report_field.set_text(message)
-            return
-
-        self._status_report_field.set_text(message)
-
-        # Determine the number of sensors and their positions
-        num_sensors = len(data)
-        self.sensors = {}
-        sensor_count = 0 # Keep track of the number of sensors created successfully
-        for i in range(num_sensors):
-
-            # Create a contact sensor at the specified position
-            # message += "\nCreating sensor " + str(i) + " at position " + str(positions[i]) + "...\n"
-            # self._status_report_field.set_text(message)
-
-            # Check if the parent path is valid
-            if not is_prim_path_valid(parent_paths[i]):
-                message += "Could not find parent path: " + parent_paths[i] + "\n"
-                self._status_report_field.set_text(message)
-                continue
-            
-            self.create_sensor(parent_paths[i], positions[i], radii[i], names[i])
-            sensor_count = sensor_count + 1
-
-        message += "\nSuccessfully created " + str(sensor_count) + " sensors\n"
-        self._status_report_field.set_text(message)
-
-        # Populate the sensor readings frame with the new sensors
-        self.update_sensor_readings_frame()
-
-
-
-    # This function breaks down the CSV file into its components. Make sure the CSV file is formatted correctly
-    #
-    # The CSV file should be formatted as follows:
-    #   - The first row should contain the names of the sensors
-    #   - The second row should contain the x, y, and z positions of the sensors
-    #   - The third row should contain the radii of the sensors
-    #   - The fourth row should contain the parent paths of the sensors
-    #
-    def import_csv(self, path):
-        """
-        Function that imports data from a CSV file
-
-        Args:
-            path (str): The path to the CSV file
-        """
-        try:
-            data = np.genfromtxt(path, delimiter=',', skip_header=1, dtype=str)
-            
-            # Save the first column as a list of names, the 2-4th columns as a list of positions, and the 5th column as a list of parent paths
-            names = data[:, 0]
-
-            # Convert the positions to a list of Gf.Vec3d objects
-            positions = []
-            for i in range(len(data)):
-                positions.append(Gf.Vec3d(float(data[i, 1]), float(data[i, 2]), float(data[i, 3])))
-
-            radii = []
-            for i in range(len(data)):
-                radii.append(float(data[i, 4]))
-
-            # Save the parent paths as a list of strings
-            parent_paths = []
-            for i in range(len(data)):
-                parent_paths.append(data[i, 5])
-
-            return names, positions, radii, parent_paths, data
-        except:
-            return None
-        
-    def create_sensor(self, parent_path, position, radius, name):
-        result, sensor = omni.kit.commands.execute(
-            "IsaacSensorCreateContactSensor",
-            path="/tact_sensor_" + name,
-            parent=parent_path,
-            min_threshold=0,
-            max_threshold=10000000,
-            color=(1, 0, 0, 1),
-            radius=radius,
-            sensor_period=-1,
-            translation=position,
-            visualize=True,
-        )
-
-        # Add the sensor to the list of sensors
-        self.sensors[name] = self.Sensor(name, position, radius, parent_path)
-
-    def remove_sensors(self):
-        """
-        Function that removes all sensors from the robot
-        """
-        if len(self.parent_paths) == 0:
-            return
-        
-        for parent_path in self.parent_paths:
-
-            # Find all prims under the parent path that contain "tact_sensor" in their name
-            try:
-                parent_prim = get_current_stage().GetPrimAtPath(parent_path)
-                prims = get_prim_children(parent_prim)
-            except:
-                self._status_report_field.set_text("Unexpected path!\n")
-                return
-
-            #self._status_report_field.set_text("Found " + str(len(prims)) + " sensors to remove\n")
-
-            # Remove all prims found
-            for prim in prims:
-                if "tact_sensor" in prim.GetName():
-                    omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/" + prim.GetName()])
 
     def _on_string_field_value_changed_fn(self, value):
         """
@@ -409,39 +252,30 @@ class UIBuilder:
         
         self.config_path = self.wrapped_ui_elements[0].get_value() + "/" + item
 
+        # Update the config path in the sensor operators
+        for operator in self._sensor_operators:
+            operator.config_path = self.config_path
+
         if self.config_path[-4:] != ".csv":
             # If the user selects a file that is not a CSV file, and it is a folder, update the string field with the new path
             self.wrapped_ui_elements[0].set_value(self.config_path)
             self.wrapped_ui_elements[1].repopulate()
         pass
 
-    ######################################################################################
-    # Contact updates
-    ######################################################################################
-    # This function updates the sensor readings in the UI at every physics step
-    def contact_sensor_update(self, dt):
-        #self._status_report_field.set_text("Updating sensor readings...\n")
-        if len(self.sliders) > 0:
-            slider_num = 0
-            for s in self.sensors.values():
-                reading = self._cs.get_sensor_reading(s.path)
-                if reading.is_valid:
-                    self.sliders[slider_num].model.set_value(
-                        float(reading.value) * self.meters_per_unit
-                    )  # readings are in kg⋅m⋅s−2, converting to Newtons
-                else:
-                    self.sliders[slider_num].model.set_value(0)
-
-                slider_num += 1
-            # contacts_raw = self._cs.get_body_contact_raw_data(self.leg_paths[0])
-            # if len(contacts_raw):
-            #     c = contacts_raw[0]
-            #     # print(c)
-
 
     ######################################################################################
     # Functions Below This Point Support The Provided Example And Can Be Deleted/Replaced
     ######################################################################################
+
+    def countdown(self, seconds, name=""):
+        for i in range(seconds, 0, -1):
+            #message += str(i) + "...\n"
+            # self._status_report_field.set_text(message)
+            print(name + " Countdown: " + str(i))
+            time.sleep(1)
+        print("\n")
+
+        return
 
     # def _on_init(self):
     #     self._articulation = None
@@ -568,12 +402,12 @@ class UIBuilder:
     #     """
     #     self._timeline.pause()
 
-    # def _reset_extension(self):
-    #     """This is called when the user opens a new stage from self.on_stage_event().
-    #     All state should be reset.
-    #     """
-    #     self._on_init()
-    #     self._reset_ui()
+    def _reset_extension(self):
+        """This is called when the user opens a new stage from self.on_stage_event().
+        All state should be reset.
+        """
+        self._on_init()
+        self._reset_ui()
 
     # def _reset_ui(self):
     #     self._scenario_state_btn.reset()
