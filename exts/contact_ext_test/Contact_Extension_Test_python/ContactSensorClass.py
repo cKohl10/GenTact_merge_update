@@ -110,7 +110,7 @@ class ContactSensorOperator(AbstractSensorOperator):
         self._status_report_field.set_text(message)
 
         # Populate the sensor readings frame with the new sensors
-        #self.update_sensor_readings_frame()
+        self.update_sensor_readings_frame()
 
     def import_csv(self, path):
         """

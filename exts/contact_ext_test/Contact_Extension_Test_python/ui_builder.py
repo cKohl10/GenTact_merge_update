@@ -204,7 +204,7 @@ class UIBuilder:
         """
 
         self.create_import_sensors_frame()
-        #self.create_all_sensor_readings_frames()
+        self.create_all_sensor_readings_frames()
 
     ############################## Import Frame Functions ########################################
     def dropdown_populate_fn(self):
