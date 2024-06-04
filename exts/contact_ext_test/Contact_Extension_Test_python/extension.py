@@ -70,7 +70,7 @@ class ContactExtension(omni.ext.IExt):
         add_menu_items(self._menu_items, EXTENSION_TITLE)
 
         # Filled in with User Functions
-        self.ui_builder = UIBuilder(self._window)
+        self.ui_builder = UIBuilder()
 
         # Events
         self._usd_context = omni.usd.get_context()

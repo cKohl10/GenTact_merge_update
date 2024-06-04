@@ -34,10 +34,7 @@ from pxr import UsdPhysics
 
 
 class UIBuilder:
-    def __init__(self, window):
-
-        # Window to hold the UI elements
-        self.window = window
+    def __init__(self):
 
         # Frames are sub-windows that can contain multiple UI elements
         self.frames = []
@@ -257,7 +254,7 @@ class UIBuilder:
             self.wrapped_ui_elements[1].repopulate()
             return
         
-        if item == "":
+        if item == "" or item == None:
             return 
         
         self.config_path = self.wrapped_ui_elements[0].get_value() + "/" + item
@@ -287,21 +284,21 @@ class UIBuilder:
 
         return
 
-    def _on_init(self):
-        # Frames are sub-windows that can contain multiple UI elements
-        self.frames = []
-        # UI elements created using a UIElementWrapper instance
-        self.wrapped_ui_elements = []
+    # def _on_init(self):
+    #     # Frames are sub-windows that can contain multiple UI elements
+    #     self.frames = []
+    #     # UI elements created using a UIElementWrapper instance
+    #     self.wrapped_ui_elements = []
 
-        # Get access to the timeline to control stop/pause/play programmatically
-        self._timeline = omni.timeline.get_timeline_interface()
+    #     # Get access to the timeline to control stop/pause/play programmatically
+    #     self._timeline = omni.timeline.get_timeline_interface()
 
-        # Create a list to hold all sensor operators
-        self._sensor_operators = []
+    #     # Create a list to hold all sensor operators
+    #     self._sensor_operators = []
 
-        ############### Add Sensor Operators Here ################
-        self._sensor_operators.append(ContactSensorOperator()) # Add a contact sensor operator
-        #########################################################
+    #     ############### Add Sensor Operators Here ################
+    #     self._sensor_operators.append(ContactSensorOperator()) # Add a contact sensor operator
+    #     #########################################################
     
 
         # Debugging
@@ -434,17 +431,22 @@ class UIBuilder:
         """This is called when the user opens a new stage from self.on_stage_event().
         All state should be reset.
         """
-        self._on_init()
+        #self._on_init()
         self._reset_ui()
 
     def _reset_ui(self):
         """This function is called by _reset_extension() to reset the UI to its initial state.
         This function should not reset the state of the extension, only the UI.
         """
-        for frame in self.frames:
-            frame.delete()
 
-        self.frames = []
-        self.wrapped_ui_elements = []
+        # Reset the status report field
+        self._status_report_field.set_text("")
 
-        self.build_ui()
+        # Reset the config path
+        self.config_path = "/TactileSim/sensor_configs"
+
+        # Reset the dropdown
+        self.wrapped_ui_elements[1].repopulate()
+
+        # Rebuild the UI
+        #self.build_ui()

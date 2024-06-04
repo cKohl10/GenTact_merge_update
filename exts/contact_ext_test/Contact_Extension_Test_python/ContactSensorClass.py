@@ -153,9 +153,7 @@ class ContactSensorOperator(AbstractSensorOperator):
             max_threshold=1000000,
             color=(1, 0, 0, 1),
             radius=radius,
-            sensor_period=1,
             translation=position,
-            visualize=True,
         )
 
         # Add the sensor to the list of sensors

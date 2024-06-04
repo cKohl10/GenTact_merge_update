@@ -35,29 +35,30 @@ class SensorData:
 
 def check_children_for_sensors(obj, parent_path):
 
-    sensor_data = []
+    sensor_data = {}
+    sensor_data_all = []
 
     # Get the parent path from the root object
     parent_path = parent_path + "/" + obj.name
 
-    is_sensor_attribtue_name = "is_sensor"
+    is_sensor_attribute_name = "is_sensor"
     pos_attribute_name = "sensor_pos"
     rad_attribute_name = "radii"
     default_radius = False
 
     # Loop through all of the children objects and search for GeometryNodes modifier
     for child in obj.children:
+        sensor_data[child.name] = False
         pos_attribute_data = []
 
         # Recursively check the children for sensors
-        sensor_data = check_children_for_sensors(child, sensor_data, parent_path)
-
-        # Loop through all of the children objects and search for GeometryNodes modifier
-        #print(f"\nChecking object {child.name} under {parent_path}...")
+        child_sensor_data = check_children_for_sensors(child, parent_path)
 
         # Ensure the object has geometry nodes modifier
         if child.modifiers.get('Skin') is None:
             #print(f"{child.name} does not have a Skin modifier.")
+            # Add the child sensor data to the sensor data list
+            sensor_data[child.name] = child_sensor_data
             continue
 
         # Get the evaluated geometry
@@ -70,10 +71,14 @@ def check_children_for_sensors(obj, parent_path):
             #print(f"Attribute {attribute_name} not found in object {child.name}.")
             # for other_name in mesh.attributes:
             #     print(f"Found attribute: {other_name}.")
+            # Add the child sensor data to the sensor data list
+            sensor_data[child.name] = child_sensor_data
             continue
 
-        if is_sensor_attribtue_name not in mesh.attributes:
+        if is_sensor_attribute_name not in mesh.attributes:
             #print(f"Attribute {is_sensor_attribtue_name} not found in object {child.name}.")
+            # Add the child sensor data to the sensor data list
+            sensor_data[child.name] = child_sensor_data
             continue
 
         if rad_attribute_name not in mesh.attributes:
@@ -90,7 +95,7 @@ def check_children_for_sensors(obj, parent_path):
         if not default_radius:
             rad_attribute_data = mesh.attributes[rad_attribute_name].data
 
-        is_sensor_data = mesh.attributes[is_sensor_attribtue_name].data
+        is_sensor_data = mesh.attributes[is_sensor_attribute_name].data
 
         # Get path to object
         parent_path = parent_path + "/" + child.name
@@ -98,19 +103,40 @@ def check_children_for_sensors(obj, parent_path):
         parent_path = re.sub(r'\.\d{3,}', '', parent_path)
 
         # Add the attribute data to the sensor data list
+        sensor_counter = 0
         for i in range(len(pos_attribute_data)):
             if is_sensor_data[i].value:
                 if default_radius:
-                    sensor_data.append(SensorData(pos_attribute_data[i].vector, 0.1, parent_path))
+                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, 0.1, parent_path))
                 else:
-                    sensor_data.append(SensorData(pos_attribute_data[i].vector, rad_attribute_data[i].value, parent_path))
+                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, rad_attribute_data[i].value, parent_path))
 
-        print(f"Found {len(pos_attribute_data)} sensor positions in object {child.name}.")
+                sensor_counter = sensor_counter + 1
+
+        #print(f"Found {sensor_counter} sensor positions in object {child.name} under {parent_path}.")
 
         # Clean up
-        eval_obj.to_mesh_clear()
+        #eval_obj.to_mesh_clear()
 
-        return sensor_data
+        # Add the child sensor data to the sensor data list
+        sensor_data[child.name] = child_sensor_data
+
+    # Print the sensor data
+    if len(obj.children) == 0:
+        return sensor_data_all
+    else:
+        print(f"\nObject {obj.name} has {len(obj.children)} child(ren):")
+        for child in obj.children:
+            if sensor_data[child.name] == False:
+                print(f"        Child: {child.name} has no sensors.")
+            else:
+                print(f"        Child: {child.name} has {len(sensor_data[child.name])} sensors.")
+
+                for sensor in sensor_data[child.name]:
+                    sensor_data_all.append(sensor)
+
+        print(f"Returning {len(sensor_data_all)} sensor positions in object {obj.name} under {parent_path}.")
+    return sensor_data_all
 
 
 def save_attribute_to_csv(context, file_path):
