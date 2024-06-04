@@ -217,6 +217,29 @@ class ContactSensorOperator(AbstractSensorOperator):
     def create_sensor_readings_frame(self):
         self.sensor_readings_frame = CollapsableFrame("Sensor Readings", collapsed=False)
 
+    # def update_sensor_readings_frame(self):
+
+    #     # Color and style for the UI elements
+    #     self.sliders = []
+    #     self.colors = [0xFFBBBBFF, 0xFFBBFFBB, 0xBBFFBBBB, 0xBBBBFFFF]
+    #     style = {"background_color": 0xFF888888, "color": 0xFF333333, "secondary_color": self.colors[0]}
+    #     #message = "There are " + str(len(self.sensors)) + " sensors\n"
+
+    #     with self.sensor_readings_frame:
+    #         # Vertical stack to hold the sensor readings in the frame
+    #         with ui.VStack(style=get_style(), spacing=5, height=0):
+    #             for s in self.sensors.values():
+    #                 #message += "Creating reading bar for sensor " + s.name + "...\n"
+    #                 with ui.HStack():
+    #                     #ui.Label(s.name, width=LABEL_WIDTH, tooltip="Force in Newtons")
+    #                     # ui.Spacer(height=0, width=10)
+    #                     style["secondary_color"] = self.colors[0]
+    #                     self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
+    #                     self.sliders[-1].enabled = False
+    #                     ui.Spacer(width=2)
+    #                     self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
+    #                     self.sliders[-1].enabled = False
+
     def update_sensor_readings_frame(self):
 
         # Color and style for the UI elements
@@ -225,15 +248,18 @@ class ContactSensorOperator(AbstractSensorOperator):
         style = {"background_color": 0xFF888888, "color": 0xFF333333, "secondary_color": self.colors[0]}
         #message = "There are " + str(len(self.sensors)) + " sensors\n"
 
+        sensors_per_row = 4
+        x = 0 # Keep track of the number of sensors created in GUI
+
         with self.sensor_readings_frame:
             # Vertical stack to hold the sensor readings in the frame
             with ui.VStack(style=get_style(), spacing=5, height=0):
-                for s in self.sensors.values():
-                    #message += "Creating reading bar for sensor " + s.name + "...\n"
+                while x < len(self.sensors):
                     with ui.HStack():
-                        ui.Label(s.name, width=LABEL_WIDTH, tooltip="Force in Newtons")
-                        # ui.Spacer(height=0, width=10)
                         style["secondary_color"] = self.colors[0]
-                        self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
-                        self.sliders[-1].enabled = False
-                        ui.Spacer(width=20)
+                        while x % sensors_per_row != 0:
+                            self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
+                            self.sliders[-1].enabled = False
+                            ui.Spacer(width=2)
+                            x = x + 1
+                        
