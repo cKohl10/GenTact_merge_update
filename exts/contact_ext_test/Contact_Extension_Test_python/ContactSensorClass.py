@@ -12,7 +12,9 @@ from omni.isaac.core.utils.stage import get_current_stage
 from omni.isaac.core.utils.prims import is_prim_path_valid, get_prim_children
 from omni.isaac.ui.element_wrappers import CollapsableFrame
 from omni.isaac.ui.ui_utils import get_style, LABEL_WIDTH
+from omni.isaac.ui.element_wrappers import CollapsableFrame, IntField
 from pxr import Gf
+from math import ceil
 
 class ContactSensorOperator(AbstractSensorOperator):
 
@@ -23,6 +25,7 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.meters_per_unit = 1.00 # Unit conversion factor
         self.activated = False # Flag to determine if the sensors are active
         self.sensor_description = "Contact Sensors" # Description of the sensor type
+        self.wrapped_ui_elements = [] # List of wrapped UI elements
 
     # Data structure to store sensor information
     class Sensor:
@@ -182,6 +185,8 @@ class ContactSensorOperator(AbstractSensorOperator):
             for prim in prims:
                 if "tact_sensor" in prim.GetName():
                     omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/" + prim.GetName()])
+            
+        self.sensors = {}
 
     def remove_sensors_fn(self):
         """
@@ -192,6 +197,9 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         self.remove_sensors()
         self._status_report_field.set_text("All sensors removed\n\n\n If sensors remain, choose the correct configuration file and click 'Update'\n")
+
+        # Clear the sensor readings frame
+        self.update_sensor_readings_frame()
 
     # This function updates the sensor readings in the UI at every physics step
     def sensor_update(self, dt):
@@ -215,7 +223,17 @@ class ContactSensorOperator(AbstractSensorOperator):
             #     # print(c)
 
     def create_sensor_readings_frame(self):
-        self.sensor_readings_frame = CollapsableFrame("Sensor Readings", collapsed=False)
+        self.sensor_readings_frame = CollapsableFrame("Contact Sensor Readings", collapsed=False)
+
+        int_field = IntField(
+            "Zoom Level:",
+            default_value=4,
+            tooltip="Type an int or click and drag to set a new value.",
+            lower_limit=1,
+            upper_limit=30,
+            on_value_changed_fn=self._on_int_field_value_changed_fn,
+        )
+        self.wrapped_ui_elements.append(int_field)
 
     # def update_sensor_readings_frame(self):
 
@@ -240,6 +258,10 @@ class ContactSensorOperator(AbstractSensorOperator):
     #                     self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
     #                     self.sliders[-1].enabled = False
 
+    def _on_int_field_value_changed_fn(self, value):
+        self.wrapped_ui_elements[0].set_value(value)
+        self.update_sensor_readings_frame()
+
     def update_sensor_readings_frame(self):
 
         # Color and style for the UI elements
@@ -248,18 +270,20 @@ class ContactSensorOperator(AbstractSensorOperator):
         style = {"background_color": 0xFF888888, "color": 0xFF333333, "secondary_color": self.colors[0]}
         #message = "There are " + str(len(self.sensors)) + " sensors\n"
 
-        sensors_per_row = 4
+        sensors_per_row = self.wrapped_ui_elements[0].get_value()
+        num_sensors = len(self.sensors)
         x = 0 # Keep track of the number of sensors created in GUI
 
         with self.sensor_readings_frame:
             # Vertical stack to hold the sensor readings in the frame
             with ui.VStack(style=get_style(), spacing=5, height=0):
-                while x < len(self.sensors):
+                for i in range(ceil(num_sensors / sensors_per_row)):
+                    #message += "Creating reading bar for sensor " + s.name + "...\n"
                     with ui.HStack():
                         style["secondary_color"] = self.colors[0]
-                        while x % sensors_per_row != 0:
+                        for j in range(min(num_sensors-(i*sensors_per_row), sensors_per_row)):
                             self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
                             self.sliders[-1].enabled = False
                             ui.Spacer(width=2)
-                            x = x + 1
+
                         
