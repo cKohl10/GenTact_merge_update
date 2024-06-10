@@ -1,4 +1,4 @@
-This extension has been tested on Isaac Sim verison 4.0.0. Using other versions may cause instability.
+This extension has been tested on **Isaac Sim verison 4.0.0**. Using other versions may cause instability.
 
 # To add the Contact Extension to Isaac Sim:
 
