@@ -11,5 +11,6 @@ The blender tactile sensor bay addon is a tool made for procedurally generating 
 # Applying the Skin Geometry Node:
 
 
-# Saving your Configurations
-The *Save Sensor Positions* button exports a .csv file contatining the sensor node positions as well as their respective path in the scene. This file is used to import the sensors designed in this environment to the Isaac Sim extension. [Click here](https://github.com/cKohl10/TactileSim/tree/main/exts) to learn more about how to use the [**Isaac Sim Contact Extension**](https://github.com/cKohl10/TactileSim/tree/main/exts) 
+# Saving Configurations
+![Alt Text](demos/saving.gif)
+The *Save Sensor Positions* button exports a .csv file contatining the sensor node positions as well as their respective path in the scene. Make sure the root primitive of the robot is selected before clicking the save button. This file is used to import the sensors designed in this environment to the Isaac Sim extension. [Click here](https://github.com/cKohl10/TactileSim/tree/main/exts) to learn more about how to use the [**Isaac Sim Contact Extension**](https://github.com/cKohl10/TactileSim/tree/main/exts) 
