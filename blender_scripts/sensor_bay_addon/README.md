@@ -1,13 +1,15 @@
-Blender Tactile Sensor Addon Capabilities
+# Blender Tactile Sensor Bay Add-on
+The blender tactile sensor bay addon is a tool made for procedurally generating variable density 3D printed tactile skins. This tool was designed to streamline the process of making large-scale coverage tactile sensor arrays.
 
-    1) Use weight painting to apply tactile sensors with configurable density.
+# Importing the Add-on:
+![Alt Text](demos/install_addon.gif)
+1) Either clone this repo or download **sensor_bay_addon.zip** under the *blender_scripts* folder.
+2) Navigate to the Add-on window in Blender under *Edit > Preferences > Add-ons*
+3) Click the *Install* button and navigate to the local save location of **sensor_bay_addon.zip**
+4) In the search bar in the preferences window, search for **Tactile Sensor Bay** and enable the add-on. If the add-on does not show up, make sure the *Enabled Add-ons Only* button is not on.
 
-    2) Save the output as a CSV for reading into Isaac Sim
-
-Importing the Addon:
+# Applying the Skin Geometry Node:
 
 
-Applying the Skin Geometry Node:
-
-
-Saving your Configurations
+# Saving your Configurations
+The *Save Sensor Positions* button exports a .csv file contatining the sensor node positions as well as their respective path in the scene. This file is used to import the sensors designed in this environment to the Isaac Sim extension. [Click here](https://github.com/cKohl10/TactileSim/tree/main/exts) to learn more about how to use the [**Isaac Sim Contact Extension**](https://github.com/cKohl10/TactileSim/tree/main/exts) 
