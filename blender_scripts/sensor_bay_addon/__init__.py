@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Tactile Sensor Bay",
     "author": "Carson Kohlbrenner",
-    "version": (1, 0),
+    "version": (1, 1),
     "blender": (2, 80, 0),
     "location": "Object > Sensor Bay",
     "description": "Paint on tactile sensors over a surface and save them for Isaac Sim",
@@ -43,8 +43,9 @@ def check_children_for_sensors(obj, parent_path):
     parent_path = parent_path + "/" + obj.name
 
     is_sensor_attribute_name = "is_sensor"
-    pos_attribute_name = "sensor_pos"
+    pos_attribute_name = "position"
     rad_attribute_name = "radii"
+    alligator_clip_attribute_name = "is_clip"
     default_radius = False
 
     # Loop through all of the children objects and search for GeometryNodes modifier
@@ -61,6 +62,8 @@ def check_children_for_sensors(obj, parent_path):
             # Add the child sensor data to the sensor data list
             sensor_data[child.name] = child_sensor_data
             continue
+
+        #print(f"Found Skin modifier in object {child.name}.")
 
         # Get the evaluated geometry
         depsgraph = bpy.context.evaluated_depsgraph_get()
@@ -87,6 +90,17 @@ def check_children_for_sensors(obj, parent_path):
             print(f"Attribute {rad_attribute_name} not found in object {child.name}. Setting default radius of 0.1.")
             default_radius = True
 
+        if alligator_clip_attribute_name in mesh.attributes:
+            is_clip_data = mesh.attributes[alligator_clip_attribute_name].data
+            # Get the position data of the alligator clip
+            for i in range(len(is_clip_data)):
+                if is_clip_data[i].value:
+                    clip_pos = mesh.attributes[pos_attribute_name].data[i].vector
+        
+            print("\n\n ############################################## \n\n")
+            print(f"    Alligator clip position found at {clip_pos} in object {child.name}.")
+            print("\n\n ############################################## \n\n")
+    
         # Get the attribute data
 
         pos_attribute_data = mesh.attributes[pos_attribute_name].data
