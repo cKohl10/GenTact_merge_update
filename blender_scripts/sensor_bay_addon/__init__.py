@@ -16,6 +16,7 @@ import csv
 import os
 import re
 import bpy.props
+import "alligator_save.py"
 from bpy.utils import resource_path
 from pathlib import Path
 from bpy_extras.io_utils import ExportHelper
