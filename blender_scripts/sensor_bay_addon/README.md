@@ -9,6 +9,7 @@ The blender tactile sensor bay addon is a tool made for procedurally generating 
 4) In the search bar in the preferences window, search for **Tactile Sensor Bay** and enable the add-on. If the add-on does not show up, make sure the *Enabled Add-ons Only* button is not on.
 
 # Applying the Skin Geometry Node:
+![Alt Text](demos/skin_overview.gif)
 
 
 # Saving Configurations
