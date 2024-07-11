@@ -12,7 +12,7 @@ from omni.isaac.core.utils.stage import get_current_stage
 from omni.isaac.core.utils.prims import is_prim_path_valid, get_prim_children
 from omni.isaac.ui.element_wrappers import CollapsableFrame
 from omni.isaac.ui.ui_utils import get_style, LABEL_WIDTH
-from omni.isaac.ui.element_wrappers import CollapsableFrame, IntField
+from omni.isaac.ui.element_wrappers import CollapsableFrame, IntField, DropDown, Button, StateButton
 from pxr import Gf
 from math import ceil
 
@@ -26,6 +26,7 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.activated = False # Flag to determine if the sensors are active
         self.sensor_description = "Contact Sensors" # Description of the sensor type
         self.wrapped_ui_elements = [] # List of wrapped UI elements
+        self.data_source = "Sim" # Data source for the sensor readings
 
     # Data structure to store sensor information
     class Sensor:
@@ -235,6 +236,26 @@ class ContactSensorOperator(AbstractSensorOperator):
         )
         self.wrapped_ui_elements.append(int_field)
 
+        data_source_dropdown = DropDown(
+            "Data Source:",
+            tooltip=" Select an option from the DropDown",
+            populate_fn=self._DSD_populate_fn,
+            on_selection_fn=self._DSD_item_selection,
+        )
+        self.wrapped_ui_elements.append(data_source_dropdown)
+        data_source_dropdown.repopulate()  # This does not happen automatically, and it triggers the on_selection_fn
+
+        # Connect to a real sensor using this button
+        connect_ROS_button = StateButton(
+                label="ROS Connection",
+                a_text="Connect",
+                b_text="Disconnect",
+                tooltip="Connect to a ROS master node",
+                on_a_click_fn=self.connect_ROS_fn,
+                on_b_click_fn=self.disconnect_ROS_fn,
+            )
+        self.wrapped_ui_elements.append(connect_ROS_button)
+
     # def update_sensor_readings_frame(self):
 
     #     # Color and style for the UI elements
@@ -257,10 +278,6 @@ class ContactSensorOperator(AbstractSensorOperator):
     #                     ui.Spacer(width=2)
     #                     self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
     #                     self.sliders[-1].enabled = False
-
-    def _on_int_field_value_changed_fn(self, value):
-        self.wrapped_ui_elements[0].set_value(value)
-        self.update_sensor_readings_frame()
 
     def update_sensor_readings_frame(self):
 
@@ -285,5 +302,33 @@ class ContactSensorOperator(AbstractSensorOperator):
                             self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
                             self.sliders[-1].enabled = False
                             ui.Spacer(width=2)
+
+
+    ##############################################################################################################
+    # Helper Functions
+    ##############################################################################################################
+
+    def _on_int_field_value_changed_fn(self, value):
+        self.wrapped_ui_elements[0].set_value(value)
+        self.update_sensor_readings_frame()
+
+    def _DSD_populate_fn(self):
+        # Populate the dropdown with the available data sources
+        return ["Sim", "Real"]
+    
+    def _DSD_item_selection(self, item):
+        # Update the data source string
+        self.data_source = item
+        self.wrapped_ui_elements[1].set_selection(item)
+
+    def connect_ROS_fn(self):
+        # Establish connection with a master ROS node, then subscribe to the data stream topic
+        
+        # Update the connection status label
+        pass
+
+    def disconnect_ROS_fn(self):
+        # Disconnect from the ROS master node
+        self.wrapped_ui_elements[2].reset()
 
                         
