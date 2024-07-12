@@ -33,6 +33,7 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.sensor_description = "Contact Sensors" # Description of the sensor type
         self.wrapped_ui_elements = [] # List of wrapped UI elements
         self.data_source = "Sim" # Data source for the sensor readings
+        self.ROS_enabled = False # Flag to determine if the ROS node is connected
 
     # Data structure to store sensor information
     class Sensor:
@@ -230,11 +231,14 @@ class ContactSensorOperator(AbstractSensorOperator):
 
             # If the data soruce is set to real, make sure the values are coming from the ROS node
             elif self.data_source == "Real":
-                
-
-
-
-
+                # Check if the ROS node is connected
+                if self.ROS_enabled:
+                    # Get the sensor readings from the ROS node
+                    rclpy.spin_once(self.touch_sub, timeout_sec=0)  # Process ROS 2 messages
+                    sensor_readings = self.touch_sub.data
+                    for i in range(len(sensor_readings)):
+                        self.sliders[slider_num].model.set_value(sensor_readings[i])
+                        slider_num += 1
 
 
 
@@ -328,6 +332,23 @@ class ContactSensorOperator(AbstractSensorOperator):
     # Helper Functions
     ##############################################################################################################
 
+    class TouchSensorSubscriber(Node):
+        def __init__(self):
+            super().__init__('touch_sensor_subscriber')
+            self.subscription = self.create_subscription(
+                Float32MultiArray,
+                'touch_sensor_val',
+                self.listener_callback,
+                10
+            )
+            self.subscription  # prevent unused variable warning
+
+            self.sensor_readings = []
+
+
+        def listener_callback(self, msg):
+            self.data = msg.data
+
     def _on_int_field_value_changed_fn(self, value):
         self.wrapped_ui_elements[0].set_value(value)
         self.update_sensor_readings_frame()
@@ -343,25 +364,16 @@ class ContactSensorOperator(AbstractSensorOperator):
 
     def connect_ROS_fn(self):
         # Establish connection with a master ROS node, then subscribe to the data stream topic
+        rclpy.init(args=None)
         self.touch_sub = TouchSensorSubscriber()
-        self.ROS_enabled = True
 
-        
-        # Update the connection status label
-        pass
+        # Check if the ROS node is connected
+        if self.touch_sub.subscription.is_active:
+            # Update the connection status label
+            self.ROS_enabled = True
+
 
     def disconnect_ROS_fn(self):
         # Disconnect from the ROS master node
         self.wrapped_ui_elements[2].reset()
-
-    class TouchSensorSubscriber(Node):
-        def __init__(self):
-            super().__init__('touch_sensor_subscriber')
-            self.subscription = self.create_subscription(
-                Float32,
-                'touch_sensor_val',
-                self.listener_callback,
-                10
-            )
-            self.subscription  # prevent unused variable warning
                             
