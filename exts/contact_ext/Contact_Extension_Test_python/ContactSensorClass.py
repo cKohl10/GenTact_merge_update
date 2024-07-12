@@ -7,6 +7,12 @@ from .AbstracSensorClass import AbstractSensorOperator
 import numpy as np
 import omni.kit.commands
 import omni.ui as ui
+
+# ROS 2
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Float32MultiArray
+
 from omni.isaac.sensor import _sensor
 from omni.isaac.core.utils.stage import get_current_stage
 from omni.isaac.core.utils.prims import is_prim_path_valid, get_prim_children
@@ -207,17 +213,31 @@ class ContactSensorOperator(AbstractSensorOperator):
         #self._status_report_field.set_text("Updating sensor readings...\n")
         if len(self.sliders) > 0:
             slider_num = 0
-            for s in self.sensors.values():
-                #self._status_report_field.set_text("Updating sensor " + s.name + " at path " + s.path + "...\n")
-                reading = self._cs.get_sensor_reading(s.path)
-                if reading.is_valid:
-                    self.sliders[slider_num].model.set_value(
-                        float(reading.value) * self.meters_per_unit
-                    )  # readings are in kg⋅m⋅s−2, converting to Newtons
-                else:
-                    self.sliders[slider_num].model.set_value(0)
 
-                slider_num += 1
+            # Update the sliders with simulated values only if the data source is set to "Sim"
+            if self.data_source == "Sim":
+                for s in self.sensors.values():
+                    #self._status_report_field.set_text("Updating sensor " + s.name + " at path " + s.path + "...\n")
+                    reading = self._cs.get_sensor_reading(s.path)
+                    if reading.is_valid:
+                        self.sliders[slider_num].model.set_value(
+                            float(reading.value) * self.meters_per_unit
+                        )  # readings are in kg⋅m⋅s−2, converting to Newtons
+                    else:
+                        self.sliders[slider_num].model.set_value(0)
+
+                    slider_num += 1
+
+            # If the data soruce is set to real, make sure the values are coming from the ROS node
+            elif self.data_source == "Real":
+                
+
+
+
+
+
+
+
             # contacts_raw = self._cs.get_body_contact_raw_data(self.leg_paths[0])
             # if len(contacts_raw):
             #     c = contacts_raw[0]
@@ -323,6 +343,9 @@ class ContactSensorOperator(AbstractSensorOperator):
 
     def connect_ROS_fn(self):
         # Establish connection with a master ROS node, then subscribe to the data stream topic
+        self.touch_sub = TouchSensorSubscriber()
+        self.ROS_enabled = True
+
         
         # Update the connection status label
         pass
@@ -331,4 +354,14 @@ class ContactSensorOperator(AbstractSensorOperator):
         # Disconnect from the ROS master node
         self.wrapped_ui_elements[2].reset()
 
-                        
+    class TouchSensorSubscriber(Node):
+        def __init__(self):
+            super().__init__('touch_sensor_subscriber')
+            self.subscription = self.create_subscription(
+                Float32,
+                'touch_sensor_val',
+                self.listener_callback,
+                10
+            )
+            self.subscription  # prevent unused variable warning
+                            
