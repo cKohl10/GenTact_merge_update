@@ -235,7 +235,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                 if self.ROS_enabled:
                     # Get the sensor readings from the ROS node
                     rclpy.spin_once(self.touch_sub, timeout_sec=0)  # Process ROS 2 messages
-                    sensor_readings = self.touch_sub.data
+                    sensor_readings = self.touch_sub.sensor_readings
                     for i in range(len(sensor_readings)):
                         self.sliders[slider_num].model.set_value(sensor_readings[i])
                         slider_num += 1
@@ -252,7 +252,7 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         int_field = IntField(
             "Zoom Level:",
-            default_value=4,
+            default_value=8,
             tooltip="Type an int or click and drag to set a new value.",
             lower_limit=1,
             upper_limit=30,
@@ -347,7 +347,7 @@ class ContactSensorOperator(AbstractSensorOperator):
 
 
         def listener_callback(self, msg):
-            self.data = msg.data
+            self.sensor_readings = msg.data
 
     def _on_int_field_value_changed_fn(self, value):
         self.wrapped_ui_elements[0].set_value(value)
@@ -364,16 +364,16 @@ class ContactSensorOperator(AbstractSensorOperator):
 
     def connect_ROS_fn(self):
         # Establish connection with a master ROS node, then subscribe to the data stream topic
-        rclpy.init(args=None)
-        self.touch_sub = TouchSensorSubscriber()
+        #rclpy.init(args=None)
+        self.touch_sub = self.TouchSensorSubscriber()
 
-        # Check if the ROS node is connected
-        if self.touch_sub.subscription.is_active:
-            # Update the connection status label
-            self.ROS_enabled = True
+        # Flag that the ROS node has been enabled
+        self.ROS_enabled = True
 
 
     def disconnect_ROS_fn(self):
         # Disconnect from the ROS master node
         self.wrapped_ui_elements[2].reset()
+
+        self.ROS_enabled = False
                             
