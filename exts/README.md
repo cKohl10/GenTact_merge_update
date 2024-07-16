@@ -1,5 +1,9 @@
 This extension has been tested on **Isaac Sim verison 4.0.0**. Using other versions may cause instability.
 
+# Prerequisites
+
+  1: ROS 2 Bridge extension (Humble) must be enabled for this extension to load. In-depth guide on enabling the ROS 2 Bridge extension is [found here](https://docs.omniverse.nvidia.com/isaacsim/latest/installation/install_ros.html#isaac-ros-workspace)
+
 # To add the Contact Extension to Isaac Sim:
 
   1: Open the extensions window, *Window* > *Extensions*

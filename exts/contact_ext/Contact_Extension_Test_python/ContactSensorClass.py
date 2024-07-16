@@ -35,6 +35,9 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.data_source = "Sim" # Data source for the sensor readings
         self.ROS_enabled = False # Flag to determine if the ROS node is connected
 
+        # ROS 2 
+        rclpy.init(args=None)
+
     # Data structure to store sensor information
     class Sensor:
         def __init__(self, name, position, radius, parent_path):
@@ -236,7 +239,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                     # Get the sensor readings from the ROS node
                     rclpy.spin_once(self.touch_sub, timeout_sec=0)  # Process ROS 2 messages
                     sensor_readings = self.touch_sub.sensor_readings
-                    for i in range(len(sensor_readings)):
+                    for i in range(min(len(sensor_readings), len(self.sensors))):
                         self.sliders[slider_num].model.set_value(sensor_readings[i])
                         slider_num += 1
 
@@ -323,7 +326,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                     with ui.HStack():
                         style["secondary_color"] = self.colors[0]
                         for j in range(min(num_sensors-(i*sensors_per_row), sensors_per_row)):
-                            self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
+                            self.sliders.append(ui.FloatDrag(min=0.0, max=1.0, step=0.001, style=style))
                             self.sliders[-1].enabled = False
                             ui.Spacer(width=2)
 
@@ -364,7 +367,6 @@ class ContactSensorOperator(AbstractSensorOperator):
 
     def connect_ROS_fn(self):
         # Establish connection with a master ROS node, then subscribe to the data stream topic
-        #rclpy.init(args=None)
         self.touch_sub = self.TouchSensorSubscriber()
 
         # Flag that the ROS node has been enabled
