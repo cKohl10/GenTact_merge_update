@@ -23,7 +23,7 @@ from omni.isaac.core.utils.prims import is_prim_path_valid, get_prim_children
 from omni.isaac.ui.element_wrappers import CollapsableFrame
 from omni.isaac.ui.ui_utils import get_style, LABEL_WIDTH
 from omni.isaac.ui.element_wrappers import CollapsableFrame, IntField, DropDown, Button, StateButton
-from pxr import Gf
+from pxr import Gf, UsdGeom, Usd
 from math import ceil
 
 class ContactSensorOperator(AbstractSensorOperator):
@@ -373,15 +373,40 @@ class ContactSensorOperator(AbstractSensorOperator):
         def index_to_pos_callback(self, request, response):
             
             # Get the sensor with the matching index
-            requested_sensor = self.sensors[request.index]
+            try:    
+                requested_sensor = self.sensors[request.index]
+            except:
+                self.get_logger().info("Sensor requested (%s) is nonexistant!" % request.index)
+                response.position = Vector3()
+                response.position.x = 0.0
+                response.position.y = 0.0
+                response.position.z = 0.0
+                return response
 
-            # Get the position of the sensor by getting prim using prim path
+            # Get the prim at the sensor's path
             prim = get_current_stage().GetPrimAtPath(requested_sensor.path)
-            position = prim.GetAttribute('xformOp:translate').Get()
+            
+            if not prim:
+                self.get_logger().info("Prim is not found")
+                response.position = Vector3()
+                response.position.x = 0.0
+                response.position.y = 0.0
+                response.position.z = 0.0
+                return response
+
+            # Create an XformCache object for efficient computation of world transformations
+            xformCache = UsdGeom.XformCache(Usd.TimeCode.Default())
+
+            # Get the world transformation matrix for the prim
+            world_transform = xformCache.GetLocalToWorldTransform(prim)
+            
+            # Extract the translation component from the world transformation matrix
+            translation = world_transform.ExtractTranslation()
+
             response.position = Vector3()
-            response.position.x = position[0]
-            response.position.y = position[1]
-            response.position.z = position[2]
+            response.position.x = translation[0]
+            response.position.y = translation[1]
+            response.position.z = translation[2]
             return response
         
         # This only needs to be called when the main sensor list is updated so the servicer can also keep track of the sensors
