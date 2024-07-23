@@ -11,7 +11,11 @@ import omni.ui as ui
 # ROS 2
 import rclpy
 from rclpy.node import Node
+
+#ROS 2 Msgs
 from std_msgs.msg import Float32MultiArray
+from tactile_msgs.srv import IndexToPos
+from geometry_msgs.msg import Vector3
 
 from omni.isaac.sensor import _sensor
 from omni.isaac.core.utils.stage import get_current_stage
@@ -37,6 +41,7 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         # ROS 2 
         rclpy.init(args=None)
+        self.contact_location_service = self.ContactLocationService()
 
     # Data structure to store sensor information
     class Sensor:
@@ -126,6 +131,8 @@ class ContactSensorOperator(AbstractSensorOperator):
         # Populate the sensor readings frame with the new sensors
         self.update_sensor_readings_frame()
 
+        self.contact_location_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
+
     def import_csv(self, path):
         """
         Function that imports the sensor data from a CSV file
@@ -198,6 +205,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                     omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/" + prim.GetName()])
             
         self.sensors = {}
+        self.contact_location_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
 
     def remove_sensors_fn(self):
         """
@@ -217,6 +225,9 @@ class ContactSensorOperator(AbstractSensorOperator):
         #self._status_report_field.set_text("Updating sensor readings...\n")
         if len(self.sliders) > 0:
             slider_num = 0
+
+            # Check for a service request to get the contact location of a sensor
+            rclpy.spin_once(self.contact_location_service, timeout_sec=0)  # Process ROS 2 messages
 
             # Update the sliders with simulated values only if the data source is set to "Sim"
             if self.data_source == "Sim":
@@ -335,6 +346,7 @@ class ContactSensorOperator(AbstractSensorOperator):
     # Helper Functions
     ##############################################################################################################
 
+    # This subscriber connects to a physical sensor and displays the readings in the UI
     class TouchSensorSubscriber(Node):
         def __init__(self):
             super().__init__('touch_sensor_subscriber')
@@ -348,9 +360,33 @@ class ContactSensorOperator(AbstractSensorOperator):
 
             self.sensor_readings = []
 
-
         def listener_callback(self, msg):
             self.sensor_readings = msg.data
+
+    # This servicer provides the contact locations of the sensors when a given sensor index is requested
+    class ContactLocationService(Node):
+        def __init__(self):
+            super().__init__('contact_location_service')
+            self.srv = self.create_service(IndexToPos, 'index_to_pos', self.index_to_pos_callback)
+            self.sensors = {}
+
+        def index_to_pos_callback(self, request, response):
+            
+            # Get the sensor with the matching index
+            requested_sensor = self.sensors[request.index]
+
+            # Get the position of the sensor by getting prim using prim path
+            prim = get_current_stage().GetPrimAtPath(requested_sensor.path)
+            position = prim.GetAttribute('xformOp:translate').Get()
+            response.position = Vector3()
+            response.position.x = position[0]
+            response.position.y = position[1]
+            response.position.z = position[2]
+            return response
+        
+        # This only needs to be called when the main sensor list is updated so the servicer can also keep track of the sensors
+        def update_sensor_list(self, sensors):
+            self.sensors = sensors
 
     def _on_int_field_value_changed_fn(self, value):
         self.wrapped_ui_elements[0].set_value(value)
