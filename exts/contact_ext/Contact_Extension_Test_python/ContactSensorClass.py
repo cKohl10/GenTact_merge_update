@@ -81,7 +81,7 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         #Import the sensor data from the CSV file
         try:
-            names, positions, radii, parent_paths, data = self.import_csv(path)
+            names, positions, normals, radii, parent_paths, data = self.import_csv(path)
             self.parent_paths = parent_paths
             self.remove_sensors() # Second call to ensure all sensors are removed after parent paths are updated
             message += "File opened successfully\n"
@@ -163,7 +163,7 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         #Import the sensor data from the CSV file
         try:
-            names, positions, radii, parent_paths, data = self.import_csv(path)
+            names, positions, normals, radii, parent_paths, data = self.import_csv(path)
             self.parent_paths = parent_paths
             self.remove_sensors() # Second call to ensure all sensors are removed after parent paths are updated
             message += "File opened successfully\n"
@@ -213,7 +213,7 @@ class ContactSensorOperator(AbstractSensorOperator):
         """
         Function that imports the sensor data from a CSV file
         CSV file should have the following format:
-        Sensor Name, X Offset, Y Offset, Z Offset, Radius, Parent Path
+        Sensor Name, X Offset, Y Offset, Z Offset, Norm X, Norm Y, Norm Z, Radius, Parent Path
         """
 
         try:
@@ -227,16 +227,21 @@ class ContactSensorOperator(AbstractSensorOperator):
             for i in range(len(data)):
                 positions.append(Gf.Vec3d(float(data[i, 1]), float(data[i, 2]), float(data[i, 3])))
 
+            # Convert the normals to a list of Gf.Vec3d objects
+            normals = []
+            for i in range(len(data)):
+                normals.append(Gf.Vec3d(float(data[i, 4]), float(data[i, 5]), float(data[i, 6])))
+
             radii = []
             for i in range(len(data)):
-                radii.append(float(data[i, 4]))
+                radii.append(float(data[i, 7]))
 
             # Save the parent paths as a list of strings
             parent_paths = []
             for i in range(len(data)):
-                parent_paths.append(data[i, 5])
+                parent_paths.append(data[i, 8])
 
-            return names, positions, radii, parent_paths, data
+            return names, positions, normals, radii, parent_paths, data
         except:
             return None
         
