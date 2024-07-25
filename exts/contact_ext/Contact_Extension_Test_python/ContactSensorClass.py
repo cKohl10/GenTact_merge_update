@@ -3,6 +3,7 @@
 # Date: 6/3/2024
 
 from .AbstracSensorClass import AbstractSensorOperator
+from .tactile_ros import TouchSensorSubscriber, ContactLocationService, ContactListPublisher
 
 import numpy as np
 import omni.kit.commands
@@ -13,13 +14,13 @@ import rclpy
 from rclpy.node import Node
 
 #ROS 2 Msgs
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, String, Int16MultiArray
 from tactile_msgs.srv import IndexToPos
 from geometry_msgs.msg import Vector3
 
 from omni.isaac.sensor import _sensor
 from omni.isaac.core.utils.stage import get_current_stage
-from omni.isaac.core.utils.prims import is_prim_path_valid, get_prim_children
+from omni.isaac.core.utils.prims import is_prim_path_valid, get_prim_children, create_prim
 from omni.isaac.ui.element_wrappers import CollapsableFrame
 from omni.isaac.ui.ui_utils import get_style, LABEL_WIDTH
 from omni.isaac.ui.element_wrappers import CollapsableFrame, IntField, DropDown, Button, StateButton
@@ -40,8 +41,10 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.ROS_enabled = False # Flag to determine if the ROS node is connected
 
         # ROS 2 
-        rclpy.init(args=None)
-        self.contact_location_service = self.ContactLocationService()
+        if not rclpy.ok():
+            rclpy.init(args=None)
+        self.contact_location_service = ContactLocationService()
+        self.contact_list_publisher = ContactListPublisher()
 
     # Data structure to store sensor information
     class Sensor:
@@ -133,6 +136,79 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         self.contact_location_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
 
+    # This function will perform exactly like the import function without placing contact sensor objects to be used in sim.
+    # This is practical for use with real sensors attached to the robot.
+    def minimal_import_sensors_fn(self):
+        """
+        Function that executes when the user clicks the 'Update' button
+        Imports the sensor data from the CSV file and creates the sensors
+        Expects the CSV file to have the following format:
+        Sensor Name, X Offset, Y Offset, Z Offset, Radius, Parent Path
+        """
+
+        self.activated = False
+
+        # Remove all sensors already on the robot
+        message = "Removing existing sensors...\n"
+        self._status_report_field.set_text(message)
+        self.remove_sensors()
+
+        message += "Sensors successfully removed\n\n"
+        self._status_report_field.set_text(message)
+
+        #Change the text of the status report field to show the import status
+        path = self.config_path
+        message += "Importing sensor data from '" + path + "'...\n"
+        self._status_report_field.set_text(message)
+
+        #Import the sensor data from the CSV file
+        try:
+            names, positions, radii, parent_paths, data = self.import_csv(path)
+            self.parent_paths = parent_paths
+            self.remove_sensors() # Second call to ensure all sensors are removed after parent paths are updated
+            message += "File opened successfully\n"
+
+            # Output the data to the status report field
+            # message += "\n\nSensor Data:\n"
+            # for i in range(len(names)):
+            #     message += str(data[i]) + "\n"
+
+        except:
+            message += "Invalid file path or file format!"
+            message += "\nPlease make sure the file has at least 2 sensors and is formatted correctly.\n"
+            self._status_report_field.set_text(message)
+            return
+
+        self._status_report_field.set_text(message)
+
+        # Determine the number of sensors and their positions
+        num_sensors = len(data)
+        self.sensors = {}
+        sensor_count = 0 # Keep track of the number of sensors created successfully
+        for i in range(num_sensors):
+
+            # Create a contact sensor at the specified position
+            # message += "\nCreating sensor " + str(i) + " at position " + str(positions[i]) + "...\n"
+            # self._status_report_field.set_text(message)
+
+            # Check if the parent path is valid
+            if not is_prim_path_valid(parent_paths[i]):
+                message += "Could not find parent path: " + parent_paths[i] + "\n"
+                self._status_report_field.set_text(message)
+                continue
+            
+            # Create the sensor
+            self.create_contact_sensor(parent_paths[i], positions[i], radii[i], names[i])
+            sensor_count = sensor_count + 1
+
+        message += "\nSuccessfully created " + str(sensor_count) + " sensors\n"
+        self._status_report_field.set_text(message)
+
+        # Populate the sensor readings frame with the new sensors
+        self.update_sensor_readings_frame()
+
+        self.contact_location_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
+
     def import_csv(self, path):
         """
         Function that imports the sensor data from a CSV file
@@ -166,16 +242,23 @@ class ContactSensorOperator(AbstractSensorOperator):
         
     def create_contact_sensor(self, parent_path, position, radius, name):
         # Create the sensor at the specified position
-        result, sensor = omni.kit.commands.execute(
-            "IsaacSensorCreateContactSensor",
-            path="/tact_sensor_" + name,
-            parent=parent_path,
-            min_threshold=0,
-            max_threshold=1000000,
-            color=(1, 0, 0, 1),
-            radius=radius,
-            translation=position,
-        )
+        if self.activated:
+            result, sensor = omni.kit.commands.execute(
+                "IsaacSensorCreateContactSensor",
+                path="/tact_sensor_" + name,
+                parent=parent_path,
+                min_threshold=0,
+                max_threshold=1000000,
+                color=(1, 0, 0, 1),
+                radius=radius,
+                translation=position,
+            )
+        else:
+            create_prim(
+                prim_path=parent_path + "/tact_sensor_" + name,
+                prim_type="XForm",
+                position=position,
+                )
 
         # Add the sensor to the list of sensors
         self.sensors[name] = self.Sensor(name, position, radius, parent_path)
@@ -225,12 +308,13 @@ class ContactSensorOperator(AbstractSensorOperator):
         #self._status_report_field.set_text("Updating sensor readings...\n")
         if len(self.sliders) > 0:
             slider_num = 0
+            contact_list = []
 
             # Check for a service request to get the contact location of a sensor
             rclpy.spin_once(self.contact_location_service, timeout_sec=0)  # Process ROS 2 messages
 
             # Update the sliders with simulated values only if the data source is set to "Sim"
-            if self.data_source == "Sim":
+            if self.data_source == "Sim" and self.activated:
                 for s in self.sensors.values():
                     #self._status_report_field.set_text("Updating sensor " + s.name + " at path " + s.path + "...\n")
                     reading = self._cs.get_sensor_reading(s.path)
@@ -238,6 +322,16 @@ class ContactSensorOperator(AbstractSensorOperator):
                         self.sliders[slider_num].model.set_value(
                             float(reading.value) * self.meters_per_unit
                         )  # readings are in kg⋅m⋅s−2, converting to Newtons
+
+                        # Check if the sensor is in contact
+                        try:
+                            contact_name_as_int = int(s.name)
+                            if reading.value > 0:
+                                contact_list.append(contact_name_as_int)
+                        except ValueError:
+                            # Handle the case where s.name cannot be converted to an int
+                            pass
+
                     else:
                         self.sliders[slider_num].model.set_value(0)
 
@@ -254,7 +348,13 @@ class ContactSensorOperator(AbstractSensorOperator):
                         self.sliders[slider_num].model.set_value(sensor_readings[i])
                         slider_num += 1
 
+                        # Check if the sensor is in contact
+                        if sensor_readings[i] > 0:
+                            contact_list.append(i)
 
+            # Publish the contact locations based on a processing call
+            if len(contact_list) > 0:
+                self.contact_list_publisher.publish_contact_list(contact_list)
 
             # contacts_raw = self._cs.get_body_contact_raw_data(self.leg_paths[0])
             # if len(contacts_raw):
@@ -346,80 +446,16 @@ class ContactSensorOperator(AbstractSensorOperator):
     # Helper Functions
     ##############################################################################################################
 
-    # This subscriber connects to a physical sensor and displays the readings in the UI
-    class TouchSensorSubscriber(Node):
-        def __init__(self):
-            super().__init__('touch_sensor_subscriber')
-            self.subscription = self.create_subscription(
-                Float32MultiArray,
-                'touch_sensor_val',
-                self.listener_callback,
-                10
-            )
-            self.subscription  # prevent unused variable warning
-
-            self.sensor_readings = []
-
-        def listener_callback(self, msg):
-            self.sensor_readings = msg.data
-
-    # This servicer provides the contact locations of the sensors when a given sensor index is requested
-    class ContactLocationService(Node):
-        def __init__(self):
-            super().__init__('contact_location_service')
-            self.srv = self.create_service(IndexToPos, 'index_to_pos', self.index_to_pos_callback)
-            self.sensors = {}
-
-        def index_to_pos_callback(self, request, response):
-            
-            # Get the sensor with the matching index
-            try:    
-                requested_sensor = self.sensors[request.index]
-            except:
-                self.get_logger().info("Sensor requested (%s) is nonexistant!" % request.index)
-                response.position = Vector3()
-                response.position.x = 0.0
-                response.position.y = 0.0
-                response.position.z = 0.0
-                return response
-
-            # Get the prim at the sensor's path
-            prim = get_current_stage().GetPrimAtPath(requested_sensor.path)
-            
-            if not prim:
-                self.get_logger().info("Prim is not found")
-                response.position = Vector3()
-                response.position.x = 0.0
-                response.position.y = 0.0
-                response.position.z = 0.0
-                return response
-
-            # Create an XformCache object for efficient computation of world transformations
-            xformCache = UsdGeom.XformCache(Usd.TimeCode.Default())
-
-            # Get the world transformation matrix for the prim
-            world_transform = xformCache.GetLocalToWorldTransform(prim)
-            
-            # Extract the translation component from the world transformation matrix
-            translation = world_transform.ExtractTranslation()
-
-            response.position = Vector3()
-            response.position.x = translation[0]
-            response.position.y = translation[1]
-            response.position.z = translation[2]
-            return response
-        
-        # This only needs to be called when the main sensor list is updated so the servicer can also keep track of the sensors
-        def update_sensor_list(self, sensors):
-            self.sensors = sensors
-
     def _on_int_field_value_changed_fn(self, value):
         self.wrapped_ui_elements[0].set_value(value)
         self.update_sensor_readings_frame()
 
     def _DSD_populate_fn(self):
         # Populate the dropdown with the available data sources
-        return ["Sim", "Real"]
+        if self.activated:
+            return ["Sim", "Real"]
+        else:
+            return ["Real"]
     
     def _DSD_item_selection(self, item):
         # Update the data source string
@@ -428,15 +464,16 @@ class ContactSensorOperator(AbstractSensorOperator):
 
     def connect_ROS_fn(self):
         # Establish connection with a master ROS node, then subscribe to the data stream topic
-        self.touch_sub = self.TouchSensorSubscriber()
+        self.touch_sub = TouchSensorSubscriber()
 
         # Flag that the ROS node has been enabled
         self.ROS_enabled = True
-
 
     def disconnect_ROS_fn(self):
         # Disconnect from the ROS master node
         self.wrapped_ui_elements[2].reset()
 
         self.ROS_enabled = False
+
+        self.touch_sub.shutdown()
                             
