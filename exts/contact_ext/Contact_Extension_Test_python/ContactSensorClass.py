@@ -3,7 +3,7 @@
 # Date: 6/3/2024
 
 from .AbstracSensorClass import AbstractSensorOperator
-from .tactile_ros import TouchSensorSubscriber, ContactLocationService, ContactListPublisher
+from .tactile_ros import TouchSensorSubscriber, ContactLocationService, ContactListPublisher, ContactPoseService
 
 import numpy as np
 import omni.kit.commands
@@ -46,8 +46,6 @@ class ContactSensorOperator(AbstractSensorOperator):
         # ROS 2 
         if not rclpy.ok():
             rclpy.init(args=None)
-        self.contact_location_service = ContactLocationService()
-        self.contact_list_publisher = ContactListPublisher()
 
     # Data structure to store sensor information
     class Sensor:
@@ -148,7 +146,11 @@ class ContactSensorOperator(AbstractSensorOperator):
         # Populate the sensor readings frame with the new sensors
         self.update_sensor_readings_frame()
 
-        self.contact_location_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
+        self._DSD_populate_fn() # Update the data source dropdown
+        self.wrapped_ui_elements[1].repopulate() # Repopulate the data source dropdown
+
+        if self.ROS_enabled:
+            self.contact_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
 
     def import_csv(self, path):
         """
@@ -188,6 +190,7 @@ class ContactSensorOperator(AbstractSensorOperator):
         
     def create_contact_sensor(self, parent_path, position, normal, radius, name):
         # Create the sensor at the specified position
+        # Note: the position vector is given relative to the parent's local frame. Effectively translation
         orientation = self.vector_to_quaternion(normal)
         if self.activated:
             result, sensor = omni.kit.commands.execute(
@@ -203,9 +206,10 @@ class ContactSensorOperator(AbstractSensorOperator):
         else:
             create_prim(
                 prim_path=parent_path + "/tact_sensor_" + name,
-                prim_type="XForm",
-                position=position,
+                prim_type="Cone",
+                translation=position,
                 orientation=orientation,
+                scale=np.array([radius, radius, 0.02]),
                 )
 
         # Add the sensor to the list of sensors
@@ -236,7 +240,8 @@ class ContactSensorOperator(AbstractSensorOperator):
                     omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/" + prim.GetName()])
             
         self.sensors = {}
-        self.contact_location_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
+        if self.ROS_enabled:
+            self.contact_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
 
     def remove_sensors_fn(self):
         """
@@ -259,7 +264,8 @@ class ContactSensorOperator(AbstractSensorOperator):
             contact_list = []
 
             # Check for a service request to get the contact location of a sensor
-            rclpy.spin_once(self.contact_location_service, timeout_sec=0)  # Process ROS 2 messages
+            if self.ROS_enabled:
+                rclpy.spin_once(self.contact_service, timeout_sec=0)  # Process ROS 2 messages
 
             # Update the sliders with simulated values only if the data source is set to "Sim"
             if self.data_source == "Sim" and self.activated:
@@ -272,13 +278,14 @@ class ContactSensorOperator(AbstractSensorOperator):
                         )  # readings are in kg⋅m⋅s−2, converting to Newtons
 
                         # Check if the sensor is in contact
-                        try:
-                            contact_name_as_int = int(s.name)
-                            if reading.value > 0:
-                                contact_list.append(contact_name_as_int)
-                        except ValueError:
-                            # Handle the case where s.name cannot be converted to an int
-                            pass
+                        if self.ROS_enabled:
+                            try:
+                                contact_name_as_int = int(s.name)
+                                if reading.value > 0:
+                                    contact_list.append(contact_name_as_int)
+                            except ValueError:
+                                # Handle the case where s.name cannot be converted to an int
+                                pass
 
                     else:
                         self.sliders[slider_num].model.set_value(0)
@@ -400,7 +407,7 @@ class ContactSensorOperator(AbstractSensorOperator):
 
     def _DSD_populate_fn(self):
         # Populate the dropdown with the available data sources
-        if self.activated:
+        if self.activated == True:
             return ["Sim", "Real"]
         else:
             return ["Real"]
@@ -413,9 +420,15 @@ class ContactSensorOperator(AbstractSensorOperator):
     def connect_ROS_fn(self):
         # Establish connection with a master ROS node, then subscribe to the data stream topic
         self.touch_sub = TouchSensorSubscriber()
+        #self.contact_service = ContactLocationService() # Service to provide contact locations [x,y,z]
+        self.contact_service = ContactPoseService() # Service to provide contact pose [x,y,z] and [x,y,z,w]
+        self.contact_list_publisher = ContactListPublisher()
+
 
         # Flag that the ROS node has been enabled
         self.ROS_enabled = True
+
+        self.contact_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
 
     def disconnect_ROS_fn(self):
         # Disconnect from the ROS master node
@@ -423,7 +436,9 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         self.ROS_enabled = False
 
-        self.touch_sub.shutdown()
+        self.touch_sub.destroy_node()
+        self.contact_service.destroy_node()
+        self.contact_list_publisher.destroy_node()
 
     def vector_to_quaternion(self, vector):
         # Normalize the vector

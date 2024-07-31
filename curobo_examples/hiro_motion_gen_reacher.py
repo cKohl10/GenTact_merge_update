@@ -118,7 +118,7 @@ from omni.isaac.core.utils.types import ArticulationAction
 from curobo.geom.sdf.world import CollisionCheckerType
 from curobo.geom.types import WorldConfig, Cuboid
 from curobo.types.base import TensorDeviceType
-from curobo.types.math import Pose
+from curobo.types.math import Pose as cuPose
 from curobo.types.robot import JointState
 from curobo.types.state import JointState
 from curobo.util.logger import log_error, setup_curobo_logger
@@ -146,8 +146,8 @@ from curobo.wrap.reacher.motion_gen import (
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Vector3
-from geometry_msgs.msg import Pose as PoseGM
-from std_msgs.msg import Int16MultiArray, Float32MultiArray
+from geometry_msgs.msg import Pose
+from std_msgs.msg import Int16MultiArray, Float32MultiArray, Float64
 from rclpy.executors import SingleThreadedExecutor
 import asyncio
 
@@ -194,7 +194,7 @@ class ObjectSpawnerNode(Node):
     def place_at_contact(self, msg):
         # Take the already pre-spawned objets and place them at the contact locations to adjust motion planning
         print("Contact detected, spawning object")
-        new_pose = Pose.from_list([msg.x,msg.y,msg.z,1,0,0,0], tensor_args=self.tensor_args)
+        new_pose = cuPose.from_list([msg.x,msg.y,msg.z,1,0,0,0], tensor_args=self.tensor_args)
         self.world_collision_checker.update_obstacle_pose("contact_obstacle_" + str(self.next_id), new_pose)
         self.spawned_viz_objects[self.next_id].set_world_pose(position=np.array([msg.x, msg.y, msg.z]))
         self.next_id = (self.next_id + 1) % len(self.spawned_viz_objects)
@@ -233,14 +233,14 @@ class ContactLocationClient(Node):
         self.next_id = 0
 
     def send_request(self, index):
-        self.get_logger().info('Sending request...')
+        #self.get_logger().info('Sending request...')
         self.req.index = index
         self.future = self.client.call_async(self.req)
         self.future.add_done_callback(self.future_callback)
         return self.future
 
     def future_callback(self, future):
-        self.get_logger().info('Future callback called')
+        #self.get_logger().info('Future callback called')
         try:
             response = future.result()
         except Exception as e:
@@ -248,7 +248,7 @@ class ContactLocationClient(Node):
                 'Service call failed %r' % (e,))
         else:
             self.get_logger().info('Contact location: {%0.2f, %0.2f, %0.2f}' % (response.position.x, response.position.y, response.position.z))
-            new_pose = Pose.from_list([response.position.x, response.position.y, response.position.z,1,0,0,0], tensor_args=self.tensor_args)
+            new_pose = cuPose.from_list([response.position.x, response.position.y, response.position.z,1,0,0,0], tensor_args=self.tensor_args)
             self.world_collision_checker.update_obstacle_pose("contact_obstacle_" + str(self.next_id), new_pose)
             self.spawned_viz_objects[self.next_id].set_world_pose(position=np.array([response.position.x, response.position.y, response.position.z]))
             self.next_id = (self.next_id + 1) % len(self.spawned_viz_objects)
@@ -270,39 +270,53 @@ class ContactPoseClient(Node):
         self.tensor_args = tensor_args
 
         self.next_id = 0
+        self.dist = 0.0
 
     def send_request(self, index):
-        self.get_logger().info('Sending request...')
+        #self.get_logger().info('Sending request...')
         self.req.index = index
         self.future = self.client.call_async(self.req)
         self.future.add_done_callback(self.future_callback)
         return self.future
 
     def future_callback(self, future):
-        self.get_logger().info('Future callback called')
+        #self.get_logger().info('Future callback called')
         try:
             response = future.result()
         except Exception as e:
             self.get_logger().info(
                 'Service call failed %r' % (e,))
         else:
-            self.get_logger().info('Contact location: {%0.2f, %0.2f, %0.2f}' % (response.position.x, response.position.y, response.position.z))
+            self.get_logger().info('Contact location: {%0.2f, %0.2f, %0.2f}' % (response.pose.position.x, response.pose.position.y, response.pose.position.z))
 
             #Add an arbitrary distance from the contact location on the object's local z axis
-            response.position.z += 0.1
+            response.pose.position.z += self.dist
 
-            #Update the obstacle pose in the world collision checker
-            new_pose = Pose.from_list([response.position.x, response.position.y, response.position.z,response.orientation.x, response.orientation.y, response.orientation.z, response.orientation.w], tensor_args=self.tensor_args)
+            # #Update the obstacle pose in the world collision checker
+            new_pose = cuPose.from_list([response.pose.position.x, response.pose.position.y, response.pose.position.z,response.pose.orientation.w, response.pose.orientation.x, response.pose.orientation.y, response.pose.orientation.z], tensor_args=self.tensor_args)
             self.world_collision_checker.update_obstacle_pose("contact_obstacle_" + str(self.next_id), new_pose)
-            self.spawned_viz_objects[self.next_id].set_world_pose(position=np.array([response.position.x, response.position.y, response.position.z]))
+            self.spawned_viz_objects[self.next_id].set_world_pose(position=np.array([response.pose.position.x, response.pose.position.y, response.pose.position.z]))
             self.next_id = (self.next_id + 1) % len(self.spawned_viz_objects)
+
+    def update_dist(self, dist):
+        self.dist = dist
+
+class ContactDistSubsciber(Node):
+    def __init__(self):
+        super().__init__('set_contact_dist_pub')
+        self.create_subscription(Float64, 'contact_dist', self.contact_dist_callback, 10)
+        self.dist = 1.0
+
+    def contact_dist_callback(self, msg):
+        print("Contact distance received: " + str(msg.data))
+        self.dist = msg.data
 
 
 ################### End Effector Teleop ####################
 class EndEffectorTeleop(Node):
     def __init__(self, target_prim):
         super().__init__("end_effector_teleop")
-        self.create_subscription(PoseGM, "end_effector_pose", self.ee_pos_callback, 10) # Switch to self.ee_callback for orientaiton as well
+        self.create_subscription(Pose, "end_effector_pose", self.ee_pos_callback, 10) # Switch to self.ee_callback for orientaiton as well
 
         self.target_prim = target_prim
         self.position = np.array([0.0, 0.0, 0.0])
@@ -310,14 +324,14 @@ class EndEffectorTeleop(Node):
         self.listen_count = 0
 
     def ee_callback(self, msg):
-        print("End effector position received")
+        #print("End effector position received")
         self.position = np.array([msg.position.x, msg.position.y, msg.position.z])
         self.orientation = np.array([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w])
         self.target_prim.set_world_pose(position=self.position, orientation=self.orientation)
         self.listen_count += 1
 
     def ee_pos_callback(self, msg):
-        print("End effector position received")
+        #print("End effector position received")
         self.position = np.array([msg.position.x, msg.position.y, msg.position.z])
         self.target_prim.set_world_pose(position=self.position)
         self.listen_count += 1
@@ -411,7 +425,7 @@ def main():
 
     touch_cuboids = []
     touch_cuboids_viz = []
-    for i in range(1):
+    for i in range(3):
         new_cuboid = Cuboid(
             name="contact_obstacle_" + str(i),
             pose=[0.0, 0.0, -1.0, 1.0, 0.0, 0.0, 0.0],
@@ -473,8 +487,12 @@ def main():
     else:
         contact_updator = ContactPoseClient(touch_cuboids_viz, motion_gen.world_coll_checker, tensor_args)
 
+    dist_sub = ContactDistSubsciber()
+    curr_dist = 0.0
+
     spawner_executor = SingleThreadedExecutor()
     spawner_executor.add_node(contact_updator)
+    spawner_executor.add_node(dist_sub)
     #########################################################
 
 
@@ -564,9 +582,16 @@ def main():
         if step_index % 20 == 0:
             executor.spin_once(timeout_sec=0.0)
 
+            # Update the spawining distance if it has changed
+            if dist_sub.dist != curr_dist:
+                print("Updating contact distance to " + str(dist_sub.dist))
+                curr_dist = dist_sub.dist
+                contact_updator.update_dist(curr_dist)
+                
+
             # Spawn an obstacle for every index returned by the list node
             for index in contact_listener_node.list:
-                print("Requesting location for index " + str(index))
+                #print("Requesting location for index " + str(index))
                 future = contact_updator.send_request(str(index))
                 spawner_executor.spin_until_future_complete(future, timeout_sec=0.1) 
                 #response = future.result()
@@ -648,7 +673,7 @@ def main():
             ee_orientation_teleop_goal = cube_orientation
 
             # compute curobo solution:
-            ik_goal = Pose(
+            ik_goal = cuPose(
                 position=tensor_args.to_device(ee_translation_goal),
                 quaternion=tensor_args.to_device(ee_orientation_teleop_goal),
             )
