@@ -76,6 +76,14 @@ parser.add_argument(
     default=None,
 )
 
+# Custom argument to specificy if the contact locations are requested from the tactile extension or not
+parser.add_argument(
+    "--no_extension",
+    action="store_true",
+    help="When True, uses the tactile extension to get contact locations",
+    default=False,
+)
+
 
 args = parser.parse_args()
 
@@ -98,6 +106,7 @@ from typing import Dict
 import carb
 import numpy as np
 from helper import add_extensions, add_robot_to_scene
+from omni.isaac.core.utils.extensions import enable_extension
 from omni.isaac.core import World
 from omni.isaac.core.objects import cuboid, sphere
 
@@ -107,7 +116,7 @@ from omni.isaac.core.utils.types import ArticulationAction
 # CuRobo
 # from curobo.wrap.reacher.ik_solver import IKSolver, IKSolverConfig
 from curobo.geom.sdf.world import CollisionCheckerType
-from curobo.geom.types import WorldConfig
+from curobo.geom.types import WorldConfig, Cuboid
 from curobo.types.base import TensorDeviceType
 from curobo.types.math import Pose
 from curobo.types.robot import JointState
@@ -137,44 +146,199 @@ from curobo.wrap.reacher.motion_gen import (
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Vector3
+from geometry_msgs.msg import Pose as PoseGM
+from std_msgs.msg import Int16MultiArray, Float32MultiArray
 from rclpy.executors import SingleThreadedExecutor
 import asyncio
 
 # Listener node
-class ContactListenerNode(Node):
-    def __init__(self):
-        super().__init__("contact_listener_node")
-        self.create_subscription(Vector3, "touch_sensor_pos", self.contact_callback, 10)
+# class ContactListenerNode(Node):
+#     def __init__(self):
+#         super().__init__("contact_listener_node")
+#         self.create_subscription(Vector3, "touch_sensor_pos", self.contact_callback, 10)
 
-        self.pos = []
+#         self.pos = []
+#         self.listen_count = 0
+
+#     def contact_callback(self, msg):
+#         print("Contact detected")
+#         self.pos = [msg.x, msg.y, msg.z]
+#         self.listen_count += 1
+
+# Added by Caleb to publish joint position solutions
+##########################
+class HIROJointPublisher(Node):
+    def __init__(self):
+        super().__init__('hiro_joint_pub')
+        self.publisher = self.create_publisher(Float32MultiArray, 'cu_joint_solution', 1)
+        self.i = 0
+
+    def publish(self, joint_positions):
+        msg = Float32MultiArray()
+        msg.data = joint_positions
+        self.publisher.publish(msg)
+
+# Object Spawner Node
+# Directly places a new object at the contact location for every contact detected
+class ObjectSpawnerNode(Node):
+    def __init__(self, spawned_viz_objects, world_collision_checker, tensor_args):
+        super().__init__("object_spawner_node")
+        self.create_subscription(Vector3, "touch_sensor_pos", self.place_at_contact, 10)
+
+        self.spawned_viz_objects = spawned_viz_objects # List of objects that have been spawned
+        self.world_collision_checker = world_collision_checker # Collision checker for the world
+        self.tensor_args = tensor_args
+
+        self.next_id = 0
+
+    def place_at_contact(self, msg):
+        # Take the already pre-spawned objets and place them at the contact locations to adjust motion planning
+        print("Contact detected, spawning object")
+        new_pose = Pose.from_list([msg.x,msg.y,msg.z,1,0,0,0], tensor_args=self.tensor_args)
+        self.world_collision_checker.update_obstacle_pose("contact_obstacle_" + str(self.next_id), new_pose)
+        self.spawned_viz_objects[self.next_id].set_world_pose(position=np.array([msg.x, msg.y, msg.z]))
+        self.next_id = (self.next_id + 1) % len(self.spawned_viz_objects)
+
+# Contact List Listener Node
+class ContactListListenerNode(Node):
+    def __init__(self):
+        super().__init__("contact_list_listener_node")
+        self.create_subscription(Int16MultiArray, "contact_list", self.parse_list_callback, 1)
+
+        self.list = []
+
+    def parse_list_callback(self, msg):
+        print("Contact list received: " + str(msg.data))
+        self.list = msg.data
+
+    def clear_list(self):
+        self.list = []
+        
+# Requests a location from the tactile extension and places an obstacle at the location recieved
+from tactile_msgs.srv import IndexToPos
+class ContactLocationClient(Node):
+    def __init__(self, spawned_viz_objects, world_collision_checker, tensor_args):
+        super().__init__('contact_location_client')
+        self.client = self.create_client(IndexToPos, 'index_to_pos')
+
+
+        # while not self.client.wait_for_service(timeout_sec=1.0):
+        #     self.get_logger().info('service not available, waiting again...')
+        self.req = IndexToPos.Request()
+
+        self.spawned_viz_objects = spawned_viz_objects # List of objects that have been spawned
+        self.world_collision_checker = world_collision_checker # Collision checker for the world
+        self.tensor_args = tensor_args
+
+        self.next_id = 0
+
+    def send_request(self, index):
+        self.get_logger().info('Sending request...')
+        self.req.index = index
+        self.future = self.client.call_async(self.req)
+        self.future.add_done_callback(self.future_callback)
+        return self.future
+
+    def future_callback(self, future):
+        self.get_logger().info('Future callback called')
+        try:
+            response = future.result()
+        except Exception as e:
+            self.get_logger().info(
+                'Service call failed %r' % (e,))
+        else:
+            self.get_logger().info('Contact location: {%0.2f, %0.2f, %0.2f}' % (response.position.x, response.position.y, response.position.z))
+            new_pose = Pose.from_list([response.position.x, response.position.y, response.position.z,1,0,0,0], tensor_args=self.tensor_args)
+            self.world_collision_checker.update_obstacle_pose("contact_obstacle_" + str(self.next_id), new_pose)
+            self.spawned_viz_objects[self.next_id].set_world_pose(position=np.array([response.position.x, response.position.y, response.position.z]))
+            self.next_id = (self.next_id + 1) % len(self.spawned_viz_objects)
+
+# Requests a location from the tactile extension and places an obstacle at the location recieved
+from tactile_msgs.srv import IndexToPose
+class ContactPoseClient(Node):
+    def __init__(self, spawned_viz_objects, world_collision_checker, tensor_args):
+        super().__init__('contact_pose_client')
+        self.client = self.create_client(IndexToPose, 'index_to_pose')
+
+
+        # while not self.client.wait_for_service(timeout_sec=1.0):
+        #     self.get_logger().info('service not available, waiting again...')
+        self.req = IndexToPose.Request()
+
+        self.spawned_viz_objects = spawned_viz_objects # List of objects that have been spawned
+        self.world_collision_checker = world_collision_checker # Collision checker for the world
+        self.tensor_args = tensor_args
+
+        self.next_id = 0
+
+    def send_request(self, index):
+        self.get_logger().info('Sending request...')
+        self.req.index = index
+        self.future = self.client.call_async(self.req)
+        self.future.add_done_callback(self.future_callback)
+        return self.future
+
+    def future_callback(self, future):
+        self.get_logger().info('Future callback called')
+        try:
+            response = future.result()
+        except Exception as e:
+            self.get_logger().info(
+                'Service call failed %r' % (e,))
+        else:
+            self.get_logger().info('Contact location: {%0.2f, %0.2f, %0.2f}' % (response.position.x, response.position.y, response.position.z))
+
+            #Add an arbitrary distance from the contact location on the object's local z axis
+            response.position.z += 0.1
+
+            #Update the obstacle pose in the world collision checker
+            new_pose = Pose.from_list([response.position.x, response.position.y, response.position.z,response.orientation.x, response.orientation.y, response.orientation.z, response.orientation.w], tensor_args=self.tensor_args)
+            self.world_collision_checker.update_obstacle_pose("contact_obstacle_" + str(self.next_id), new_pose)
+            self.spawned_viz_objects[self.next_id].set_world_pose(position=np.array([response.position.x, response.position.y, response.position.z]))
+            self.next_id = (self.next_id + 1) % len(self.spawned_viz_objects)
+
+
+################### End Effector Teleop ####################
+class EndEffectorTeleop(Node):
+    def __init__(self, target_prim):
+        super().__init__("end_effector_teleop")
+        self.create_subscription(PoseGM, "end_effector_pose", self.ee_pos_callback, 10) # Switch to self.ee_callback for orientaiton as well
+
+        self.target_prim = target_prim
+        self.position = np.array([0.0, 0.0, 0.0])
+        self.orientation = np.array([1.0, 0.0, 0.0, 0.0])
         self.listen_count = 0
 
-    def contact_callback(self, msg):
-        print("Contact detected")
-        self.pos = [msg.x, msg.y, msg.z]
+    def ee_callback(self, msg):
+        print("End effector position received")
+        self.position = np.array([msg.position.x, msg.position.y, msg.position.z])
+        self.orientation = np.array([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w])
+        self.target_prim.set_world_pose(position=self.position, orientation=self.orientation)
         self.listen_count += 1
 
+    def ee_pos_callback(self, msg):
+        print("End effector position received")
+        self.position = np.array([msg.position.x, msg.position.y, msg.position.z])
+        self.target_prim.set_world_pose(position=self.position)
+        self.listen_count += 1
+
+
 # Asynchronous function to listen for contact
-async def contact_listener(executor, node):
-    while True:
-        executor.spin_once(timeout_sec=0.1)
-        print("Listened for contact " + str(node.listen_count) + " times")
-        await asyncio.sleep(0)
+# async def contact_listener(executor, node):
+#     while True:
+#         executor.spin_once(timeout_sec=0.1)
+#         print("Listened for contact " + str(node.listen_count) + " times")
+#         await asyncio.sleep(0)
 
 ###############################################
+
+################### Contact Obstacle Spawning ####################
+#class ContactObstacleSpawner(Node):
 
 ########### OV #################;;;;;
 
 
 def main():
-
-    ######## Initialize ROS2 node #########
-    rclpy.init(args=None)
-    contactNode = ContactListenerNode()
-    executor = SingleThreadedExecutor()
-    executor.add_node(contactNode)
-    listen_count = 0
-    #######################################
 
     # create a curobo motion gen instance:
     num_targets = 0
@@ -194,14 +358,24 @@ def main():
         "/World/target",
         position=np.array([0.5, 0, 0.5]),
         orientation=np.array([0, 1, 0, 0]),
-        color=np.array([1.0, 0, 0]),
-        size=0.05,
+        color=np.array([0, 1.0, 0]),
+        size=0.02,
     )
 
     setup_curobo_logger("warn")
     past_pose = None
     n_obstacle_cuboids = 30
     n_obstacle_mesh = 100
+
+    ######## Initialize ROS2 node #########
+    rclpy.init(args=None)
+    ee_teleop_node = EndEffectorTeleop(target)
+    contact_listener_node = ContactListListenerNode()
+    hiro_joint_pub = HIROJointPublisher()
+    executor = SingleThreadedExecutor()
+    executor.add_node(ee_teleop_node)
+    executor.add_node(contact_listener_node)
+    #######################################
 
     # warmup curobo instance
     usd_help = UsdHelper()
@@ -233,7 +407,31 @@ def main():
     world_cfg1.mesh[0].name += "_mesh"
     world_cfg1.mesh[0].pose[2] = -10.5
 
-    world_cfg = WorldConfig(cuboid=world_cfg_table.cuboid, mesh=world_cfg1.mesh)
+    ################## Add Contact Objects ##################
+
+    touch_cuboids = []
+    touch_cuboids_viz = []
+    for i in range(1):
+        new_cuboid = Cuboid(
+            name="contact_obstacle_" + str(i),
+            pose=[0.0, 0.0, -1.0, 1.0, 0.0, 0.0, 0.0],
+            dims=[0.1, 0.1, 0.1],
+            color=[0.8, 0.0, 0.0, 1.0],
+            scale=0.1,
+        )
+        touch_cuboids.append(new_cuboid)
+
+        # Visual double that can be seen in the simulation
+        cuboid_visual = cuboid.VisualCuboid(
+            "/World/contact_obstacle_" + str(i) + "_viz",
+            position=np.array([0.0, 0.0, 1.0]),
+            orientation=np.array([1.0, 0.0, 0.0, 0.0]),
+            color=np.array([0.8, 0.0, 0.0]),
+            size=0.1,
+        )
+        touch_cuboids_viz.append(cuboid_visual)
+
+    world_cfg = WorldConfig(cuboid=touch_cuboids + world_cfg_table.cuboid, mesh=world_cfg1.mesh)
 
     trajopt_dt = None
     optimize_dt = True
@@ -263,12 +461,36 @@ def main():
         trim_steps=trim_steps,
     )
     motion_gen = MotionGen(motion_gen_config)
+
+    # Add the cuboid to the scene
+    #motion_gen.world_coll_checker.add_obb(new_cuboid)
+    #motion_gen.world_coll_checker.add_obb(new_cuboid_2)
+
+    # Instantiate the appropriate class based on the --no_extension argument
+    # This defaults to requesting contact locations from the tactile extension
+    if args.no_extension:
+        contact_updator = ObjectSpawnerNode(touch_cuboids_viz, motion_gen.world_coll_checker, tensor_args)
+    else:
+        contact_updator = ContactPoseClient(touch_cuboids_viz, motion_gen.world_coll_checker, tensor_args)
+
+    spawner_executor = SingleThreadedExecutor()
+    spawner_executor.add_node(contact_updator)
+    #########################################################
+
+
     print("warming up...")
     motion_gen.warmup(enable_graph=True, warmup_js_trajopt=False, parallel_finetune=True)
 
     print("Curobo is Ready")
 
     add_extensions(simulation_app, args.headless_mode)
+
+    # Add the contact extension to the simulation
+    if not args.no_extension:
+        try:
+            enable_extension("contact_ext")
+        except:
+            print("Contact extension not found")
 
     plan_config = MotionGenPlanConfig(
         enable_graph=False,
@@ -319,35 +541,40 @@ def main():
         if step_index < 20:
             continue
 
-        if step_index == 50 or step_index % 1000 == 0.0:
-            print("Updating world, reading w.r.t.", robot_prim_path)
-            obstacles = usd_help.get_obstacles_from_stage(
-                # only_paths=[obstacles_path],
-                reference_prim_path=robot_prim_path,
-                ignore_substring=[
-                    robot_prim_path,
-                    "/World/target",
-                    "/World/defaultGroundPlane",
-                    "/curobo",
-                ],
-            ).get_collision_check_world()
-            print(len(obstacles.objects))
+        # if step_index == 50 or step_index % 1000 == 0.0:
+        #     print("Updating world, reading w.r.t.", robot_prim_path)
+        #     obstacles = usd_help.get_obstacles_from_stage(
+        #         # only_paths=[obstacles_path],
+        #         reference_prim_path=robot_prim_path,
+        #         ignore_substring=[
+        #             robot_prim_path,
+        #             "/World/target",
+        #             "/World/defaultGroundPlane",
+        #             "/curobo",
+        #         ],
+        #     ).get_collision_check_world()
+        #     print(len(obstacles.objects))
 
-            motion_gen.update_world(obstacles)
-            print("Updated World")
-            carb.log_info("Synced CuRobo world from stage.")
+        #     motion_gen.update_world(obstacles)
+        #     print("Updated World")
+        #     carb.log_info("Synced CuRobo world from stage.")
 
+        ##################### End Effector Teleop #####################
         # Place the target at wherever the contact is detected
-        if step_index % 200 == 0:
-            print("Spin Here?")
-            executor.spin_once(timeout_sec=0.1)
-            # loop = asyncio.get_event_loop()
-            # loop.run_until_complete(contact_listener(executor, contactNode))
+        if step_index % 20 == 0:
+            executor.spin_once(timeout_sec=0.0)
 
-            contact_pose = contactNode.pos
-            if len(contact_pose) == 3:
-                target_pos_new = np.array([contact_pose[0], contact_pose[1], contact_pose[2]])
-                target.set_world_pose(position=target_pos_new)
+            # Spawn an obstacle for every index returned by the list node
+            for index in contact_listener_node.list:
+                print("Requesting location for index " + str(index))
+                future = contact_updator.send_request(str(index))
+                spawner_executor.spin_until_future_complete(future, timeout_sec=0.1) 
+                #response = future.result()
+
+            # Clear the list after all the objects have been spawned
+            contact_listener_node.clear_list()
+
+        ###############################################################
 
         # position and orientation of target virtual cube:
         cube_position, cube_orientation = target.get_world_pose()
@@ -472,6 +699,20 @@ def main():
                 cmd_state.position.cpu().numpy(),
                 joint_indices=idx_list,
             )
+
+
+            # Publish the joint positions to the ROS2 network
+            #hiro_joint_data = list(cmd_plan.position.cpu().numpy()[0][:-2])
+            hiro_joint_data = list(cmd_state.position.cpu().numpy()[:-2])
+            hiro_joint_data = [x.item() for x in hiro_joint_data]
+            # print(type(hiro_joint_data))
+            # print(type(hiro_joint_data[0]))
+            msg = Float32MultiArray()
+            # print(hiro_joint_data, "\n\n\n")
+            msg.data = hiro_joint_data
+            hiro_joint_pub.publisher.publish(msg)
+
+
             # set desired joint angles obtained from IK:
             articulation_controller.apply_action(art_action)
             cmd_idx += 1

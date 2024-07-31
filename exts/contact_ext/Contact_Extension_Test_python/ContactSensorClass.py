@@ -18,6 +18,9 @@ from std_msgs.msg import Float32MultiArray, String, Int16MultiArray
 from tactile_msgs.srv import IndexToPos
 from geometry_msgs.msg import Vector3
 
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+
 from omni.isaac.sensor import _sensor
 from omni.isaac.core.utils.stage import get_current_stage
 from omni.isaac.core.utils.prims import is_prim_path_valid, get_prim_children, create_prim
@@ -66,75 +69,8 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.activated = True
         self._cs = _sensor.acquire_contact_sensor_interface()
 
-        # Remove all sensors already on the robot
-        message = "Removing existing sensors...\n"
-        self._status_report_field.set_text(message)
-        self.remove_sensors()
-
-        message += "Sensors successfully removed\n\n"
-        self._status_report_field.set_text(message)
-
-        #Change the text of the status report field to show the import status
-        path = self.config_path
-        message += "Importing sensor data from '" + path + "'...\n"
-        self._status_report_field.set_text(message)
-
-        #Import the sensor data from the CSV file
-        try:
-            names, positions, normals, radii, parent_paths, data = self.import_csv(path)
-            self.parent_paths = parent_paths
-            self.remove_sensors() # Second call to ensure all sensors are removed after parent paths are updated
-            message += "File opened successfully\n"
-
-            # Output the data to the status report field
-            # message += "\n\nSensor Data:\n"
-            # for i in range(len(names)):
-            #     message += str(data[i]) + "\n"
-
-        except:
-            message += "Invalid file path or file format!"
-            message += "\nPlease make sure the file has at least 2 sensors and is formatted correctly.\n"
-            self._status_report_field.set_text(message)
-            return
-
-        self._status_report_field.set_text(message)
-
-        # Determine the number of sensors and their positions
-        num_sensors = len(data)
-        self.sensors = {}
-        sensor_count = 0 # Keep track of the number of sensors created successfully
-        for i in range(num_sensors):
-
-            # Create a contact sensor at the specified position
-            # message += "\nCreating sensor " + str(i) + " at position " + str(positions[i]) + "...\n"
-            # self._status_report_field.set_text(message)
-
-            # Check if the parent path is valid
-            if not is_prim_path_valid(parent_paths[i]):
-                message += "Could not find parent path: " + parent_paths[i] + "\n"
-                self._status_report_field.set_text(message)
-                continue
-
-            # Get the parent prim
-            parent_prim = get_current_stage().GetPrimAtPath(parent_paths[i])
-            
-            # Check if the appled link has a rigidbody component (Unknown if this is necessary)
-            # if not parent_prim.HasAPI(UsdPhysics.RigidBodyAPI):
-            #     message += "Parent path does not have a rigidbody component: " + parent_paths[i] + "\n"
-            #     self._status_report_field.set_text(message)
-            #     continue
-            
-            # Create the sensor
-            self.create_contact_sensor(parent_paths[i], positions[i], radii[i], names[i])
-            sensor_count = sensor_count + 1
-
-        message += "\nSuccessfully created " + str(sensor_count) + " sensors\n"
-        self._status_report_field.set_text(message)
-
-        # Populate the sensor readings frame with the new sensors
-        self.update_sensor_readings_frame()
-
-        self.contact_location_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
+        # Apply the sensors to the robot
+        self.apply_sensors()
 
     # This function will perform exactly like the import function without placing contact sensor objects to be used in sim.
     # This is practical for use with real sensors attached to the robot.
@@ -148,6 +84,11 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         self.activated = False
 
+        # Apply the sensors to the robot
+        self.apply_sensors()
+
+
+    def apply_sensors(self):
         # Remove all sensors already on the robot
         message = "Removing existing sensors...\n"
         self._status_report_field.set_text(message)
@@ -198,7 +139,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                 continue
             
             # Create the sensor
-            self.create_contact_sensor(parent_paths[i], positions[i], radii[i], names[i])
+            self.create_contact_sensor(parent_paths[i], positions[i], normals[i], radii[i], names[i])
             sensor_count = sensor_count + 1
 
         message += "\nSuccessfully created " + str(sensor_count) + " sensors\n"
@@ -245,8 +186,9 @@ class ContactSensorOperator(AbstractSensorOperator):
         except:
             return None
         
-    def create_contact_sensor(self, parent_path, position, radius, name):
+    def create_contact_sensor(self, parent_path, position, normal, radius, name):
         # Create the sensor at the specified position
+        orientation = self.vector_to_quaternion(normal)
         if self.activated:
             result, sensor = omni.kit.commands.execute(
                 "IsaacSensorCreateContactSensor",
@@ -263,6 +205,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                 prim_path=parent_path + "/tact_sensor_" + name,
                 prim_type="XForm",
                 position=position,
+                orientation=orientation,
                 )
 
         # Add the sensor to the list of sensors
@@ -481,4 +424,30 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.ROS_enabled = False
 
         self.touch_sub.shutdown()
-                            
+
+    def vector_to_quaternion(self, vector):
+        # Normalize the vector
+        vector = vector / np.linalg.norm(vector)
+        
+        # Default z-axis
+        z_axis = np.array([0, 0, 1])
+        
+        # Calculate the rotation axis (cross product)
+        rotation_axis = np.cross(z_axis, vector)
+        if np.linalg.norm(rotation_axis) < 1e-6:
+            # The vectors are parallel, so no rotation is needed or 180 degree rotation
+            if np.dot(z_axis, vector) > 0:
+                return R.from_quat([0, 0, 0, 1])  # No rotation
+            else:
+                return R.from_quat([1, 0, 0, 0])  # 180 degree rotation around x-axis
+        
+        # Normalize the rotation axis
+        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+        
+        # Calculate the rotation angle (dot product)
+        rotation_angle = np.arccos(np.dot(z_axis, vector))
+        
+        # Create the quaternion
+        quaternion = R.from_rotvec(rotation_angle * rotation_axis).as_quat()
+        return quaternion
+                                

@@ -46,7 +46,7 @@ class ContactLocationService(Node):
             response.position = Vector3()
             response.position.x = 0.0
             response.position.y = 0.0
-            response.position.z = 0.0
+            response.position.z = -1.0
             return response
 
         # Get the prim at the sensor's path
@@ -57,7 +57,7 @@ class ContactLocationService(Node):
             response.position = Vector3()
             response.position.x = 0.0
             response.position.y = 0.0
-            response.position.z = 0.0
+            response.position.z = -1.0
             return response
 
         # Create an XformCache object for efficient computation of world transformations
@@ -68,6 +68,8 @@ class ContactLocationService(Node):
         
         # Extract the translation component from the world transformation matrix
         translation = world_transform.ExtractTranslation()
+
+        # translation, orientation = prim.get_world_pose()
 
         response.position = Vector3()
         response.position.x = translation[0]
