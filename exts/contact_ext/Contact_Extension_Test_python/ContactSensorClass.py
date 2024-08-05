@@ -145,6 +145,7 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         message += "\nSuccessfully created " + str(sensor_count) + " sensors\n"
         self._status_report_field.set_text(message)
+        self.rotation_count += 1.0
 
         # Populate the sensor readings frame with the new sensors
         self.update_sensor_readings_frame()
@@ -205,22 +206,13 @@ class ContactSensorOperator(AbstractSensorOperator):
     
         # orientation = rel_orientation * parent_orientation
         ##### Debugging #####
-        rot_count = 5.0
-        anim_axis = rel_orientation.GetAxis()
-        anim_angle = rel_orientation.GetAngle() * (((self.rotation_count % rot_count)+1) / rot_count)
-        orientation = Gf.Rotation(anim_axis, anim_angle)
-        self.rotation_count += 1.0
-
-        print(f"Parent Axis ")
-
-
-        #orientation = rel_orientation
+        orientation = rel_orientation
         print(f"Final Orientation: ({orientation.GetAxis()[0]:.2f}, {orientation.GetAxis()[1]:.2f}, {orientation.GetAxis()[2]:.2f}) by {orientation.GetAngle():.2f} degrees\n")
 
+        #orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
         orientation = orientation.GetQuat()
         orientation = orientation.Normalize()
-        
-        orientation = np.array([orientation.GetImaginary()[0], orientation.GetImaginary()[1], orientation.GetImaginary()[2], orientation.GetReal()])
+        orientation = np.array([orientation.GetReal(), orientation.GetImaginary()[0], orientation.GetImaginary()[1], orientation.GetImaginary()[2]])
 
         if self.activated:
             result, sensor = omni.kit.commands.execute(
