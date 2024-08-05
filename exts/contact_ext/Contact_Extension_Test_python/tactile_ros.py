@@ -9,7 +9,9 @@ from geometry_msgs.msg import Vector3, Point, Quaternion, Pose
 
 # USD
 from omni.isaac.core.utils.stage import get_current_stage
-from pxr import Usd, UsdGeom
+from omni.isaac.core.utils.prims import get_prim_at_path, get_prim_object_type
+import typing
+from pxr import Usd, UsdGeom, Gf
 
 
 # This subscriber connects to a physical sensor and displays the readings in the UI
@@ -51,6 +53,8 @@ class ContactLocationService(Node):
 
         # Get the prim at the sensor's path
         prim = get_current_stage().GetPrimAtPath(requested_sensor.path)
+
+        #print(f"Prim type: {prim_type}")
         
         if not prim:
             self.get_logger().info("Prim is not found")
@@ -86,6 +90,7 @@ class ContactPoseService(Node):
     def __init__(self):
         super().__init__('contact_pose_service')
         self.srv = self.create_service(IndexToPose, 'index_to_pose', self.index_to_pose_callback)
+        print("ContactPoseService initialized")
         self.sensors = {}
 
     def index_to_pose_callback(self, request, response):
@@ -103,14 +108,15 @@ class ContactPoseService(Node):
             response.pose.position.y = 0.0
             response.pose.position.z = -1.0
 
-            response.pose.rientation.x = 0.0
+            response.pose.orientation.x = 0.0
             response.pose.orientation.y = 0.0
             response.pose.orientation.z = 0.0
             response.pose.orientation.w = 1.0
             return response
 
         # Get the prim at the sensor's path
-        prim = get_current_stage().GetPrimAtPath(requested_sensor.path)
+        #prim = get_current_stage().GetPrimAtPath(requested_sensor.path)
+        prim = get_prim_at_path(requested_sensor.path)
         
         if not prim:
             self.get_logger().info("Prim is not found")
@@ -126,15 +132,36 @@ class ContactPoseService(Node):
 
         # Create an XformCache object for efficient computation of world transformations
         xformCache = UsdGeom.XformCache(Usd.TimeCode.Default())
+        # xform = UsdGeom.Xformable(prim)
+        # time = Usd.TimeCode.EarliestTime() # The time at which we compute the bounding box
+
+        # print(f"Time: {time}")
 
         # Get the world transformation matrix for the prim
         world_transform = xformCache.GetLocalToWorldTransform(prim)
+        # base_prim = get_prim_at_path("/World/panda")
+        # world_transform = xformCache.ComputeRelativeTransform(prim, base_prim)[0]
+        # print(f"World transform: {world_transform}")
+        # ComputeRelativeTransform
+        # world_transform: Gf.Matrix4d = xform.ComputeLocalToWorldTransform(time)
 
         # Extract the translation component from the world transformation matrix
+        converged = world_transform.Orthonormalize() # Required for the rotation to be correct
+        # print(f"Converged: {converged}")
+        rotation = world_transform.ExtractRotation()
         translation = world_transform.ExtractTranslation()
 
         # Extract the rotation component from the world transformation matrix
-        rotation = world_transform.ExtractRotationQuat()
+
+        # Print the rotation as an euler angle
+        # print(f"Input rotation: {rotation.TransformDir(Gf.Vec3d(0,0,1))}")
+
+        # arbitrary_rotation = Gf.Rotation(Gf.Vec3d(0.3,0.3,0.3), 90.0)
+        # rotation = rotation * arbitrary_rotation
+
+        rotation = rotation.GetQuaternion()
+
+        #translation, rotation = prim.get_world_pose()
 
             # Debug prints
         # print(f"Translation: {translation}")
@@ -149,7 +176,7 @@ class ContactPoseService(Node):
         response.pose.orientation.z = rotation.GetImaginary()[2]
         response.pose.orientation.w = rotation.GetReal()
 
-         # Debug prints
+        #  # Debug prints
         # print(f"Response position: ({response.pose.position.x}, {response.pose.position.y}, {response.pose.position.z})")
         # print(f"Response orientation: ({response.pose.orientation.x}, {response.pose.orientation.y}, {response.pose.orientation.z}, {response.pose.orientation.w})")
 
@@ -157,7 +184,7 @@ class ContactPoseService(Node):
     
     # This only needs to be called when the main sensor list is updated so the servicer can also keep track of the sensors
     def update_sensor_list(self, sensors):
-        print(f"Updating sensor list in ContactPoseService")
+        #print(f"Updating sensor list in ContactPoseService")
         self.sensors = sensors
 
 # This publisher publishes the indices of the sensors that are currently in contact with an object
@@ -172,5 +199,13 @@ class ContactListPublisher(Node):
         msg.data = contact_list
         self.publisher.publish(msg)
         #self.get_logger().info(f'Published contact list: {msg.data}')
+
+def get_prim_transform(prim: Usd.Prim):
+    xformCache = UsdGeom.XformCache(Usd.TimeCode.Default())
+    world_transform = xformCache.GetLocalToWorldTransform(prim)
+    world_transform.Orthonormalize()
+    translation = world_transform.ExtractTranslation()
+    rotation = world_transform.ExtractRotation()
+    return translation, rotation
         
     
