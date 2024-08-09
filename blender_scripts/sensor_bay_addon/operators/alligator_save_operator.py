@@ -7,6 +7,7 @@
 import bpy
 import csv
 import re
+import os
 import bpy.props
 from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty
@@ -19,7 +20,7 @@ class AlligatorSaveOperator(Operator, ExportHelper):
     bl_idname = "object.alligator_save_operator"
     bl_label = "Alligator Save"
 
-    filename_ext = ".csv"
+    filename_ext = ""
     filter_glob: StringProperty(
         options={'HIDDEN'},
         maxlen=255,  # Max internal buffer length, longer would be clamped.
@@ -38,26 +39,8 @@ class AlligatorSaveOperator(Operator, ExportHelper):
         context.window_manager.fileselect_add(self)  # Open file explorer
         return {'RUNNING_MODAL'}
     
-############################################################
-##################### Helper Functions #####################
-############################################################
-
-# This sensor data class is used to store infomation about each sensor
-class SensorData:
-    def __init__(self, pos, radius, parent, is_clip=False):
-        self.pos = pos
-        self.radius = radius
-        self.parent = parent
-        self.is_clip = is_clip
-
-    def __str__(self):
-        return f"Pos: {self.pos}, Radius: {self.radius}, Parent: {self.parent}"
-
-    def __repr__(self):
-        return str(self)
-
-# This function recursively checks the children of the object for sensors
-def check_children_for_sensors(obj, parent_path):
+    # This function recursively checks the children of the object for sensors
+def check_children_for_sensors(obj, parent_path, folder_path):
 
     sensor_data = {}
     sensor_data_all = []
@@ -77,16 +60,19 @@ def check_children_for_sensors(obj, parent_path):
         pos_attribute_data = []
 
         # Recursively check the children for sensors
-        child_sensor_data = check_children_for_sensors(child, parent_path)
+        child_sensor_data = check_children_for_sensors(child, parent_path, folder_path)
 
         # Ensure the object has geometry nodes modifier
         if child.modifiers.get('Skin') is None:
-            #print(f"{child.name} does not have a Skin modifier.")
+            # print(f"{child.name} does not have a Skin modifier.")
             # Add the child sensor data to the sensor data list
             sensor_data[child.name] = child_sensor_data
             continue
 
         #print(f"Found Skin modifier in object {child.name}.")
+
+        # Export the object with skin modifier as an obj file
+        export_object(child, folder_path + "/" + child.name + ".obj")
 
         # Get the evaluated geometry
         depsgraph = bpy.context.evaluated_depsgraph_get()
@@ -197,18 +183,23 @@ def check_children_for_sensors(obj, parent_path):
     return sensor_data_all
 
 # This function saves the sensor positions to a CSV file
-def save_attribute_to_csv(context, file_path):
+def save_attribute_to_csv(context, folder_path):
     # Get the object
     obj = context.object
 
     # Expand the ~ symbol into the path of the home directory
     #file_path = os.path.expanduser(file_path)
 
+    # Create a folder at the folder_path to save all exported files 
+    mesh_folder_path = folder_path + '/meshes'
+    os.makedirs(folder_path, exist_ok=True)
+    os.makedirs(mesh_folder_path, exist_ok=True)
+
     # Make an array of all sensor positions,radii, and parent paths
     sensor_data = []
     
     # Check the children for sensors
-    sensor_data = check_children_for_sensors(obj, "")
+    sensor_data = check_children_for_sensors(obj, "", mesh_folder_path)
 
     # Check if there are any sensor positions
     if len(sensor_data) == 0:
@@ -217,7 +208,7 @@ def save_attribute_to_csv(context, file_path):
 
     # Save the attribute data to CSV
     index_counter = 1
-    with open(file_path + '/sensor_config.csv', 'w', newline='') as csvfile:
+    with open(folder_path + '/sensor_config.csv', 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         csv_writer.writerow(['Index', 'X', 'Y', 'Z', 'Radius', 'Parent'])
         
@@ -236,4 +227,33 @@ def save_attribute_to_csv(context, file_path):
 
 # Saves the selected sensors as an STL file
 def export_object(ob, file_path):
-    bpy.ops.export_mesh.stl(filepath=file_path, use_selection=True)
+
+    # Deselect all objects
+    bpy.ops.object.select_all(action='DESELECT')
+
+    # Set the selected object to the active object
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+
+    #bpy.ops.export_mesh.stl(filepath=file_path, use_selection=True)
+    bpy.ops.wm.obj_export(filepath=file_path, export_selected_objects=True)
+    
+############################################################
+##################### Helper Functions #####################
+############################################################
+
+# This sensor data class is used to store infomation about each sensor
+class SensorData:
+    def __init__(self, pos, radius, parent, is_clip=False):
+        self.pos = pos
+        self.radius = radius
+        self.parent = parent
+        self.is_clip = is_clip
+
+    def __str__(self):
+        return f"Pos: {self.pos}, Radius: {self.radius}, Parent: {self.parent}"
+
+    def __repr__(self):
+        return str(self)
+
+
