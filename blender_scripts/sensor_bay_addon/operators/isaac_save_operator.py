@@ -44,8 +44,9 @@ class IsaacSaveOperator(Operator, ExportHelper):
 ############################################################
 
 class SensorData:
-    def __init__(self, pos, radius, parent):
+    def __init__(self, pos, normal, radius, parent):
         self.pos = pos
+        self.normal = normal
         self.radius = radius
         self.parent = parent
 
@@ -65,6 +66,7 @@ def check_children_for_sensors(obj, parent_path):
 
     is_sensor_attribute_name = "is_sensor"
     pos_attribute_name = "position"
+    norm_attribute_name = "sensor_normal"
     rad_attribute_name = "radii"
     alligator_clip_attribute_name = "is_clip"
     default_radius = False
@@ -73,6 +75,7 @@ def check_children_for_sensors(obj, parent_path):
     for child in obj.children:
         sensor_data[child.name] = False
         pos_attribute_data = []
+        normal_attribute_data = []
 
         # Recursively check the children for sensors
         child_sensor_data = check_children_for_sensors(child, parent_path)
@@ -106,6 +109,12 @@ def check_children_for_sensors(obj, parent_path):
             sensor_data[child.name] = child_sensor_data
             continue
 
+        if norm_attribute_name not in mesh.attributes:
+            #print(f"Attribute {norm_attribute_name} not found in object {child.name}.")
+            # Add the child sensor data to the sensor data list
+            sensor_data[child.name] = child_sensor_data
+            continue
+
         if rad_attribute_name not in mesh.attributes:
             #Set a default radius value if the radii attribute is not found
             print(f"Attribute {rad_attribute_name} not found in object {child.name}. Setting default radius of 0.1.")
@@ -125,6 +134,7 @@ def check_children_for_sensors(obj, parent_path):
         # Get the attribute data
 
         pos_attribute_data = mesh.attributes[pos_attribute_name].data
+        normal_attribute_data = mesh.attributes[norm_attribute_name].data
 
         # Get the radii attribute data
         rad_attribute_data = []
@@ -143,9 +153,9 @@ def check_children_for_sensors(obj, parent_path):
         for i in range(len(pos_attribute_data)):
             if is_sensor_data[i].value:
                 if default_radius:
-                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, 0.1, parent_path))
+                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, normal_attribute_data[i].vector, 0.1, parent_path))
                 else:
-                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, rad_attribute_data[i].value, parent_path))
+                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, normal_attribute_data[i].vector, rad_attribute_data[i].value, parent_path))
 
                 sensor_counter = sensor_counter + 1
 
@@ -196,11 +206,12 @@ def save_attribute_to_csv(context, file_path):
     # Save the attribute data to CSV
     with open(file_path, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
-        csv_writer.writerow(['Index', 'X', 'Y', 'Z', 'Radius', 'Parent'])
+        csv_writer.writerow(['Index', 'X', 'Y', 'Z', 'NormX', 'NormY', 'NormZ', 'Radius', 'Parent'])
         
         for i, element in enumerate(sensor_data):
             pos = element.pos
-            csv_writer.writerow([i, pos.x, pos.y, pos.z, element.radius, element.parent])
+            norm = element.normal
+            csv_writer.writerow([i, pos.x, pos.y, pos.z, norm.x, norm.y, norm.z, element.radius, element.parent])
     
     # print(f"\nAttribute {attribute_name} saved to {file_path}")
     print(f"Sensor count: {len(sensor_data)}")

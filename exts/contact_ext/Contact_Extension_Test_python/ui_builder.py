@@ -168,6 +168,14 @@ class UIBuilder:
                     )
                     self.wrapped_ui_elements.append(button)
 
+                    button = Button(
+                        "Refresh " + operator.sensor_description,
+                        "Minimal Update",
+                        tooltip="Place sensor markers (empty prims) at the sensor locations for sensor readings",
+                        on_click_fn=operator.minimal_import_sensors_fn,
+                    )
+                    self.wrapped_ui_elements.append(button)
+
                 # Add a remove sensors button to all supported sensor operators
                 for operator in self._sensor_operators:
                     button = Button(

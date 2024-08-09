@@ -19,6 +19,13 @@ class AbstractSensorOperator:
         """
         pass
 
+    def minimal_import_sensors_fn(self):
+        """
+        Function that imports the sensor data from the CSV file and creates fake sensors
+        Useful for testing purposes and with real sensors where simulation is not needed or possible
+        """
+        pass
+
     def remove_sensors_fn(self):
         """
         Function that removes all sensors from the robot

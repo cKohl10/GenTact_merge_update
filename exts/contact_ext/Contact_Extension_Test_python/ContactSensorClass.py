@@ -3,6 +3,7 @@
 # Date: 6/3/2024
 
 from .AbstracSensorClass import AbstractSensorOperator
+from .tactile_ros import TouchSensorSubscriber, ContactLocationService, ContactListPublisher, ContactPoseService, get_prim_transform
 
 import numpy as np
 import omni.kit.commands
@@ -11,16 +12,22 @@ import omni.ui as ui
 # ROS 2
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray
+
+#ROS 2 Msgs
+from std_msgs.msg import Float32MultiArray, String, Int16MultiArray
+from tactile_msgs.srv import IndexToPos
 from geometry_msgs.msg import Vector3
+
+import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 from omni.isaac.sensor import _sensor
 from omni.isaac.core.utils.stage import get_current_stage
-from omni.isaac.core.utils.prims import is_prim_path_valid, get_prim_children
+from omni.isaac.core.utils.prims import is_prim_path_valid, get_prim_children, create_prim
 from omni.isaac.ui.element_wrappers import CollapsableFrame
 from omni.isaac.ui.ui_utils import get_style, LABEL_WIDTH
 from omni.isaac.ui.element_wrappers import CollapsableFrame, IntField, DropDown, Button, StateButton
-from pxr import Gf
+from pxr import Gf, UsdGeom, Usd
 from math import ceil
 
 class ContactSensorOperator(AbstractSensorOperator):
@@ -35,6 +42,11 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.wrapped_ui_elements = [] # List of wrapped UI elements
         self.data_source = "Sim" # Data source for the sensor readings
         self.ROS_enabled = False # Flag to determine if the ROS node is connected
+        self.rotation_count = 0.0 # Counter to keep track of the number of rotations
+
+        # ROS 2 
+        if not rclpy.ok():
+            rclpy.init(args=None)
 
     # Data structure to store sensor information
     class Sensor:
@@ -56,6 +68,26 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.activated = True
         self._cs = _sensor.acquire_contact_sensor_interface()
 
+        # Apply the sensors to the robot
+        self.apply_sensors()
+
+    # This function will perform exactly like the import function without placing contact sensor objects to be used in sim.
+    # This is practical for use with real sensors attached to the robot.
+    def minimal_import_sensors_fn(self):
+        """
+        Function that executes when the user clicks the 'Update' button
+        Imports the sensor data from the CSV file and creates the sensors
+        Expects the CSV file to have the following format:
+        Sensor Name, X Offset, Y Offset, Z Offset, Radius, Parent Path
+        """
+
+        self.activated = False
+
+        # Apply the sensors to the robot
+        self.apply_sensors()
+
+
+    def apply_sensors(self):
         # Remove all sensors already on the robot
         message = "Removing existing sensors...\n"
         self._status_report_field.set_text(message)
@@ -71,7 +103,7 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         #Import the sensor data from the CSV file
         try:
-            names, positions, radii, parent_paths, data = self.import_csv(path)
+            names, positions, normals, radii, parent_paths, data = self.import_csv(path)
             self.parent_paths = parent_paths
             self.remove_sensors() # Second call to ensure all sensors are removed after parent paths are updated
             message += "File opened successfully\n"
@@ -104,31 +136,31 @@ class ContactSensorOperator(AbstractSensorOperator):
                 message += "Could not find parent path: " + parent_paths[i] + "\n"
                 self._status_report_field.set_text(message)
                 continue
-
-            # Get the parent prim
+            
             parent_prim = get_current_stage().GetPrimAtPath(parent_paths[i])
-            
-            # Check if the appled link has a rigidbody component (Unknown if this is necessary)
-            # if not parent_prim.HasAPI(UsdPhysics.RigidBodyAPI):
-            #     message += "Parent path does not have a rigidbody component: " + parent_paths[i] + "\n"
-            #     self._status_report_field.set_text(message)
-            #     continue
-            
+
             # Create the sensor
-            self.create_contact_sensor(parent_paths[i], positions[i], radii[i], names[i])
+            self.create_contact_sensor(parent_paths[i], positions[i], normals[i], radii[i], names[i], parent_prim)
             sensor_count = sensor_count + 1
 
         message += "\nSuccessfully created " + str(sensor_count) + " sensors\n"
         self._status_report_field.set_text(message)
+        self.rotation_count += 1.0
 
         # Populate the sensor readings frame with the new sensors
         self.update_sensor_readings_frame()
+
+        self._DSD_populate_fn() # Update the data source dropdown
+        self.wrapped_ui_elements[1].repopulate() # Repopulate the data source dropdown
+
+        if self.ROS_enabled:
+            self.contact_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
 
     def import_csv(self, path):
         """
         Function that imports the sensor data from a CSV file
         CSV file should have the following format:
-        Sensor Name, X Offset, Y Offset, Z Offset, Radius, Parent Path
+        Sensor Name, X Offset, Y Offset, Z Offset, Norm X, Norm Y, Norm Z, Radius, Parent Path
         """
 
         try:
@@ -142,31 +174,65 @@ class ContactSensorOperator(AbstractSensorOperator):
             for i in range(len(data)):
                 positions.append(Gf.Vec3d(float(data[i, 1]), float(data[i, 2]), float(data[i, 3])))
 
+            # Convert the normals to a list of Gf.Vec3d objects
+            normals = []
+            for i in range(len(data)):
+                normals.append(Gf.Vec3d(float(data[i, 4]), float(data[i, 5]), float(data[i, 6])))
+
             radii = []
             for i in range(len(data)):
-                radii.append(float(data[i, 4]))
+                radii.append(float(data[i, 7]))
 
             # Save the parent paths as a list of strings
             parent_paths = []
             for i in range(len(data)):
-                parent_paths.append(data[i, 5])
+                parent_paths.append(data[i, 8])
 
-            return names, positions, radii, parent_paths, data
+            return names, positions, normals, radii, parent_paths, data
         except:
             return None
         
-    def create_contact_sensor(self, parent_path, position, radius, name):
+    def create_contact_sensor(self, parent_path, position, normal, radius, name, parent_prim):
         # Create the sensor at the specified position
-        result, sensor = omni.kit.commands.execute(
-            "IsaacSensorCreateContactSensor",
-            path="/tact_sensor_" + name,
-            parent=parent_path,
-            min_threshold=0,
-            max_threshold=1000000,
-            color=(1, 0, 0, 1),
-            radius=radius,
-            translation=position,
-        )
+        # Note: the position vector is given relative to the parent's local frame. Effectively translation
+        print(f"Sensor {name} Input Normal: ({normal[0]:.2f}, {normal[1]:.2f}, {normal[2]:.2f})")
+
+        parent_orientation = get_prim_transform(parent_prim)[1]
+        print(f"Parent Orientation: ({parent_orientation.GetAxis()[0]:.2f}, {parent_orientation.GetAxis()[1]:.2f}, {parent_orientation.GetAxis()[2]:.2f}) by {parent_orientation.GetAngle():.2f} degrees")
+
+        rel_orientation = Gf.Rotation(self.vector_to_quaternion(normal)[1]) #Normal is relative to the parent's local frame
+        print(f"Relative Orientation: ({rel_orientation.GetAxis()[0]:.2f}, {rel_orientation.GetAxis()[1]:.2f}, {rel_orientation.GetAxis()[2]:.2f}) by {rel_orientation.GetAngle():.2f} degrees")
+
+    
+        # orientation = rel_orientation * parent_orientation
+        ##### Debugging #####
+        orientation = rel_orientation
+        print(f"Final Orientation: ({orientation.GetAxis()[0]:.2f}, {orientation.GetAxis()[1]:.2f}, {orientation.GetAxis()[2]:.2f}) by {orientation.GetAngle():.2f} degrees\n")
+
+        #orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
+        orientation = orientation.GetQuat()
+        orientation = orientation.Normalize()
+        orientation = np.array([orientation.GetReal(), orientation.GetImaginary()[0], orientation.GetImaginary()[1], orientation.GetImaginary()[2]])
+
+        if self.activated:
+            result, sensor = omni.kit.commands.execute(
+                "IsaacSensorCreateContactSensor",
+                path="/tact_sensor_" + name,
+                parent=parent_path,
+                min_threshold=0,
+                max_threshold=1000000,
+                color=(1, 0, 0, 1),
+                radius=radius,
+                translation=position,
+            )
+        else:
+            create_prim(
+                prim_path=parent_path + "/tact_sensor_" + name,
+                prim_type="Cone",
+                translation=position,
+                orientation=orientation,
+                scale=np.array([radius, radius, 0.02]),
+                )
 
         # Add the sensor to the list of sensors
         self.sensors[name] = self.Sensor(name, position, radius, parent_path)
@@ -196,6 +262,8 @@ class ContactSensorOperator(AbstractSensorOperator):
                     omni.kit.commands.execute('DeletePrims', paths=[parent_path + "/" + prim.GetName()])
             
         self.sensors = {}
+        if self.ROS_enabled:
+            self.contact_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
 
     def remove_sensors_fn(self):
         """
@@ -215,9 +283,14 @@ class ContactSensorOperator(AbstractSensorOperator):
         #self._status_report_field.set_text("Updating sensor readings...\n")
         if len(self.sliders) > 0:
             slider_num = 0
+            contact_list = []
+
+            # Check for a service request to get the contact location of a sensor
+            if self.ROS_enabled:
+                rclpy.spin_once(self.contact_service, timeout_sec=0)  # Process ROS 2 messages
 
             # Update the sliders with simulated values only if the data source is set to "Sim"
-            if self.data_source == "Sim":
+            if self.data_source == "Sim" and self.activated:
                 for s in self.sensors.values():
                     #self._status_report_field.set_text("Updating sensor " + s.name + " at path " + s.path + "...\n")
                     reading = self._cs.get_sensor_reading(s.path)
@@ -225,6 +298,17 @@ class ContactSensorOperator(AbstractSensorOperator):
                         self.sliders[slider_num].model.set_value(
                             float(reading.value) * self.meters_per_unit
                         )  # readings are in kg⋅m⋅s−2, converting to Newtons
+
+                        # Check if the sensor is in contact
+                        if self.ROS_enabled:
+                            try:
+                                contact_name_as_int = int(s.name)
+                                if reading.value > 0:
+                                    contact_list.append(contact_name_as_int)
+                            except ValueError:
+                                # Handle the case where s.name cannot be converted to an int
+                                pass
+
                     else:
                         self.sliders[slider_num].model.set_value(0)
 
@@ -237,11 +321,17 @@ class ContactSensorOperator(AbstractSensorOperator):
                     # Get the sensor readings from the ROS node
                     rclpy.spin_once(self.touch_sub, timeout_sec=0)  # Process ROS 2 messages
                     sensor_readings = self.touch_sub.sensor_readings
-                    for i in range(len(sensor_readings)):
+                    for i in range(min(len(sensor_readings), len(self.sensors))):
                         self.sliders[slider_num].model.set_value(sensor_readings[i])
                         slider_num += 1
 
+                        # Check if the sensor is in contact
+                        if sensor_readings[i] > 0:
+                            contact_list.append(i)
 
+            # Publish the contact locations based on a processing call
+            if len(contact_list) > 0:
+                self.contact_list_publisher.publish_contact_list(contact_list)
 
             # contacts_raw = self._cs.get_body_contact_raw_data(self.leg_paths[0])
             # if len(contacts_raw):
@@ -324,7 +414,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                     with ui.HStack():
                         style["secondary_color"] = self.colors[0]
                         for j in range(min(num_sensors-(i*sensors_per_row), sensors_per_row)):
-                            self.sliders.append(ui.FloatDrag(min=0.0, max=15.0, step=0.001, style=style))
+                            self.sliders.append(ui.FloatDrag(min=0.0, max=1.0, step=0.001, style=style))
                             self.sliders[-1].enabled = False
                             ui.Spacer(width=2)
 
@@ -356,7 +446,10 @@ class ContactSensorOperator(AbstractSensorOperator):
 
     def _DSD_populate_fn(self):
         # Populate the dropdown with the available data sources
-        return ["Sim", "Real"]
+        if self.activated == True:
+            return ["Sim", "Real"]
+        else:
+            return ["Real"]
     
     def _DSD_item_selection(self, item):
         # Update the data source string
@@ -365,16 +458,56 @@ class ContactSensorOperator(AbstractSensorOperator):
 
     def connect_ROS_fn(self):
         # Establish connection with a master ROS node, then subscribe to the data stream topic
-        #rclpy.init(args=None)
-        self.touch_sub = self.TouchSensorSubscriber()
+        self.touch_sub = TouchSensorSubscriber()
+        #self.contact_service = ContactLocationService() # Service to provide contact locations [x,y,z]
+        self.contact_service = ContactPoseService() # Service to provide contact pose [x,y,z] and [x,y,z,w]
+        self.contact_list_publisher = ContactListPublisher()
+
 
         # Flag that the ROS node has been enabled
         self.ROS_enabled = True
 
+        self.contact_service.update_sensor_list(self.sensors) # Update the servicer with the new sensor list
 
     def disconnect_ROS_fn(self):
         # Disconnect from the ROS master node
         self.wrapped_ui_elements[2].reset()
 
         self.ROS_enabled = False
-                            
+
+        self.touch_sub.destroy_node()
+        self.contact_service.destroy_node()
+        self.contact_list_publisher.destroy_node()
+
+    def vector_to_quaternion(self, vector):
+        # Normalize the vector
+        # vector = vector / np.linalg.norm(vector)
+        
+        # # Default z-axis
+        # z_axis = np.array([0, 0, 1])
+        
+        # # Calculate the rotation axis (cross product)
+        # rotation_axis = np.cross(z_axis, vector)
+        # if np.linalg.norm(rotation_axis) < 1e-6:
+        #     # The vectors are parallel, so no rotation is needed or 180 degree rotation
+        #     if np.dot(z_axis, vector) > 0:
+        #         return R.from_quat([0, 0, 0, 1])  # No rotation
+        #     else:
+        #         return R.from_quat([1, 0, 0, 0])  # 180 degree rotation around x-axis
+        
+        # # Normalize the rotation axis
+        # rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+        
+        # # Calculate the rotation angle (dot product)
+        # rotation_angle = np.arccos(np.dot(z_axis, vector))
+        
+        # # Create the quaternion
+        # quaternion = R.from_rotvec(rotation_angle * rotation_axis).as_quat()
+        # return quaternion
+
+        rot = Gf.Rotation(Gf.Vec3d(0,0,1), Gf.Vec3d(vector[0], vector[1], vector[2]))
+        quaternion = rot.GetQuaternion()
+        quaternion.Normalize()
+        qt = np.array([quaternion.GetImaginary()[0], quaternion.GetImaginary()[1], quaternion.GetImaginary()[2], quaternion.GetReal()])
+        return qt, quaternion
+                                
