@@ -9,7 +9,7 @@ import csv
 import re
 import bpy.props
 from bpy_extras.io_utils import ExportHelper
-from bpy.props import StringProperty
+from bpy.props import StringProperty, BoolProperty
 from bpy.types import Operator
 
 ############################################################
@@ -21,7 +21,6 @@ class AlligatorSaveOperator(Operator, ExportHelper):
 
     filename_ext = ".csv"
     filter_glob: StringProperty(
-        default="*.csv",
         options={'HIDDEN'},
         maxlen=255,  # Max internal buffer length, longer would be clamped.
     )
@@ -218,7 +217,7 @@ def save_attribute_to_csv(context, file_path):
 
     # Save the attribute data to CSV
     index_counter = 1
-    with open(file_path, 'w', newline='') as csvfile:
+    with open(file_path + '/sensor_config.csv', 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         csv_writer.writerow(['Index', 'X', 'Y', 'Z', 'Radius', 'Parent'])
         
@@ -234,4 +233,7 @@ def save_attribute_to_csv(context, file_path):
     
     # print(f"\nAttribute {attribute_name} saved to {file_path}")
     print(f"Sensor count: {len(sensor_data)}")
-    
+
+# Saves the selected sensors as an STL file
+def export_object(ob, file_path):
+    bpy.ops.export_mesh.stl(filepath=file_path, use_selection=True)

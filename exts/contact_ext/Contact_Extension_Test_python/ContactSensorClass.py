@@ -12,6 +12,7 @@ import omni.ui as ui
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
+from geometry_msgs.msg import Vector3
 
 from omni.isaac.sensor import _sensor
 from omni.isaac.core.utils.stage import get_current_stage
@@ -342,7 +343,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                 10
             )
             self.subscription  # prevent unused variable warning
-
+            
             self.sensor_readings = []
 
 
