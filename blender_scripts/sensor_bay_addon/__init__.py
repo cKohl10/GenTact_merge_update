@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Tactile Sensor Bay",
     "author": "Carson Kohlbrenner",
-    "version": (1, 5),
+    "version": (1, 6),
     "blender": (2, 80, 0),
     "location": "Object > Sensor Bay",
     "description": "Paint on tactile sensors over a surface and save them for Isaac Sim",
