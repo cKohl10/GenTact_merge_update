@@ -139,9 +139,9 @@ def check_children_for_sensors(obj, parent_path, folder_path):
         for i in range(len(pos_attribute_data)):
             if is_sensor_data[i].value:
                 if default_radius:
-                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, 0.1, parent_path))
+                    child_sensor_data.append(SensorData(child.name, pos_attribute_data[i].vector, 0.1, parent_path))
                 else:
-                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, rad_attribute_data[i].value, parent_path))
+                    child_sensor_data.append(SensorData(child.name, pos_attribute_data[i].vector, rad_attribute_data[i].value, parent_path))
 
                 sensor_counter = sensor_counter + 1
 
@@ -213,6 +213,11 @@ def save_attribute_to_csv(context, folder_path):
         csv_writer.writerow(['Index', 'X', 'Y', 'Z', 'Radius', 'Parent'])
         
         for element in sensor_data:
+            if element.name != curr_name:
+                curr_name = element.name
+                csv_writer.writerow(["element.name"])
+                csv_writer.writerow([""])
+
             pos = element.pos
 
             # Check if the sensor is an alligator clip
@@ -236,7 +241,7 @@ def export_object(ob, file_path):
     bpy.context.view_layer.objects.active = ob
 
     #bpy.ops.export_mesh.stl(filepath=file_path, use_selection=True)
-    bpy.ops.wm.obj_export(filepath=file_path, export_selected_objects=True)
+    bpy.ops.wm.stl_export(filepath=file_path, export_selected_objects=True, use_scene_unit=True)
     
 ############################################################
 ##################### Helper Functions #####################
@@ -244,11 +249,12 @@ def export_object(ob, file_path):
 
 # This sensor data class is used to store infomation about each sensor
 class SensorData:
-    def __init__(self, pos, radius, parent, is_clip=False):
+    def __init__(self, name, pos, radius, parent, is_clip=False):
         self.pos = pos
         self.radius = radius
         self.parent = parent
         self.is_clip = is_clip
+        self.name = name
 
     def __str__(self):
         return f"Pos: {self.pos}, Radius: {self.radius}, Parent: {self.parent}"
