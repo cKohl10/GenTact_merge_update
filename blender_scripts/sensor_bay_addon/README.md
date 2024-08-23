@@ -8,6 +8,13 @@ The blender tactile sensor bay addon is a tool made for procedurally generating 
 3) Click the *Install* button and navigate to the local save location of **sensor_bay_addon.zip**
 4) In the search bar in the preferences window, search for **Tactile Sensor Bay** and enable the add-on. If the add-on does not show up, make sure the *Enabled Add-ons Only* button is not on.
 
+# Dependancies:
+If your version of blender does not include numpy or networkx, run this script in administrator mode through the scripting console
+`import sys`
+`import pip`
+`pip.main(['install', 'numpy', '--target', (sys.exec_prefix) + '\\lib\\site-packages'])`
+`pip.main(['install', 'networkx', '--target', (sys.exec_prefix) + '\\lib\\site-packages'])`
+
 # Applying the Skin Geometry Node:
 ![Alt Text](demos/skin_overview.gif)
 
