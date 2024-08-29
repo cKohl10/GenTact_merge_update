@@ -3,6 +3,7 @@
 # Date: 6/3/2024
 
 from .AbstracSensorClass import AbstractSensorOperator
+from .optimizers import HeuristicTracker
 from .tactile_ros import TouchSensorSubscriber, ContactLocationService, ContactListPublisher, ContactPoseService, get_prim_transform
 
 import numpy as np
@@ -46,6 +47,9 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.rotation_count = 0.0 # Counter to keep track of the number of rotations
         self.contact_log = [] # Dictionary to store times a sensor is in contact
         self.save_path = "TactileSim/sensor_configs/tmp_saves" # Path to save the contact log
+        self.output_path = "TactileSim/sensor_configs/tmp_saves" # Path to save the optimizer output
+        self.heuristic_tracker = HeuristicTracker() # Tracker for the optimizer heuristics
+        self.heuristic_name = "" # Name of the heuristic to apply
 
         # ROS 2 
         if not rclpy.ok():
@@ -376,36 +380,81 @@ class ContactSensorOperator(AbstractSensorOperator):
             )
         self.wrapped_ui_elements.append(connect_ROS_button)
 
-        # Save Path
-        string_field = StringField(
-            "Save Path",
-            default_value=self.save_path,
-            tooltip="Path to save contact log",
-            read_only=False,
-            multiline_okay=False,
-            on_value_changed_fn=self._on_string_field_value_changed_fn,
-            use_folder_picker=True,
-            #item_filter_fn=is_usd_or_python_path,
-        )
-        self.wrapped_ui_elements.append(string_field)
+        self.create_save_frame()
+        self.create_optimize_frame()
 
-        # Save Data Button
-        save_data_button = Button(
-            text="Save Data",
-            label="Save Data",
-            tooltip="Save the sensor data to a CSV file",
-            on_click_fn=self.save_data_fn,
-        )
-        self.wrapped_ui_elements.append(save_data_button)
+    def create_save_frame(self):
+        self.save_frame = CollapsableFrame("Save Data", collapsed=True)
+        with self.save_frame:
+            with ui.VStack(style=get_style(), spacing=5, height=0):
+                # Save Path
+                string_field = StringField(
+                    "Save Path",
+                    default_value=self.save_path,
+                    tooltip="Path to save contact log",
+                    read_only=False,
+                    multiline_okay=False,
+                    on_value_changed_fn=self._on_string_field_value_changed_fn,
+                    use_folder_picker=True,
+                    #item_filter_fn=is_usd_or_python_path,
+                )
+                self.wrapped_ui_elements.append(string_field)
 
-        # Reset Data Collection Button
-        reset_data_button = Button(
-            text="Reset Data",
-            label="Reset Data",
-            tooltip="Reset the data collection",
-            on_click_fn=self.reset_data_fn,
-        )
-        self.wrapped_ui_elements.append(reset_data_button)
+                # Save Data Button
+                save_data_button = Button(
+                    text="Save Data",
+                    label="Save Data",
+                    tooltip="Save the sensor data to a CSV file",
+                    on_click_fn=self.save_data_fn,
+                )
+                self.wrapped_ui_elements.append(save_data_button)
+
+                # Reset Data Collection Button
+                reset_data_button = Button(
+                    text="Reset Data",
+                    label="Reset Data",
+                    tooltip="Reset the data collection",
+                    on_click_fn=self.reset_data_fn,
+                )
+                self.wrapped_ui_elements.append(reset_data_button)
+
+    def create_optimize_frame(self):
+        self.optimize_frame = CollapsableFrame("Optimize Sensors", collapsed=True)
+        with self.optimize_frame:
+            with ui.VStack(style=get_style(), spacing=5, height=0):
+                # Heuristic Output Path
+                string_field = StringField(
+                    "Output Path",
+                    default_value=self.output_path,
+                    tooltip="Path to save optimizer heuristic output",
+                    read_only=False,
+                    multiline_okay=False,
+                    on_value_changed_fn=self._on_output_field_value_changed_fn,
+                    use_folder_picker=True,
+                    #item_filter_fn=is_usd_or_python_path,
+                )
+                self.wrapped_ui_elements.append(string_field)
+
+                # Heuristic Dropdown
+                heuristic_dropdown = DropDown(
+                    "Heuristic:",
+                    tooltip=" Select an option from the DropDown",
+                    populate_fn=self.heuristic_dropdown_populate_fn,
+                    on_selection_fn=self.heuristic_dropdown_item_selection,
+                )
+                self.wrapped_ui_elements.append(heuristic_dropdown)
+                heuristic_dropdown.repopulate()  # This does not happen automatically, and it triggers the on_selection_fn
+
+                # Apply Heuristic Button
+                apply_heuristic_button = Button(
+                    text="Apply Heuristic",
+                    label="Run",
+                    tooltip="Apply the selected heuristic to the sensor data",
+                    on_click_fn=self.apply_heuristic_fn,
+                )
+                self.wrapped_ui_elements.append(apply_heuristic_button)
+
+
 
     def update_sensor_readings_frame(self):
 
@@ -494,6 +543,7 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.data_source = item
         self.wrapped_ui_elements[1].set_selection(item)
 
+    #### ROS Functions #### 
     def connect_ROS_fn(self):
         # Establish connection with a master ROS node, then subscribe to the data stream topic
         self.touch_sub = TouchSensorSubscriber()
@@ -520,6 +570,35 @@ class ContactSensorOperator(AbstractSensorOperator):
     def _on_string_field_value_changed_fn(self, value):
         self.save_path = value
         self.wrapped_ui_elements[3].set_value(value)
+
+    def _on_output_field_value_changed_fn(self, value):
+        self.save_path = value
+        self.wrapped_ui_elements[4].set_value(value)    
+
+
+    #### Heuristic Functions ####
+    def heuristic_dropdown_populate_fn(self):
+
+        heuristic_names = []
+        for heuristic in self.heuristic_tracker.get_heuristics():
+            heuristic_names.append(heuristic.get_name())
+
+        if self.heuristic_name == "":
+            self.heuristic_name = heuristic_names[0]
+
+        return heuristic_names
+    
+    def heuristic_dropdown_item_selection(self, item):
+        # Update the data source string
+        self.heuristic_name = item
+        self.wrapped_ui_elements[7].set_selection(item)
+
+    def apply_heuristic_fn(self):
+        # Apply the selected heuristic to the sensor data
+        if self.heuristic_name != "":
+            self.heuristic_tracker.apply_heuristic(self.heuristic_name, self.config_path, self.save_path + "/contact_log.csv", self.output_path + "/output.csv")
+        else:
+            self._status_report_field.set_text("No heuristic selected!\n")
 
     def vector_to_quaternion(self, vector):
         # Normalize the vector

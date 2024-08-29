@@ -48,11 +48,10 @@ class UIBuilder:
         # Create a list to hold all sensor operators
         self._sensor_operators = []
 
-        ############### Add Sensor Operators Here ################
+        ############### Add Sensor Operators Here ###############
         self._sensor_operators.append(ContactSensorOperator()) # Add a contact sensor operator
         #self._sensor_operators.append(ProximitySensorOperator()) # Proximity Sensors WIP
         #########################################################
-    
 
         # Debugging
         # version = sys.version
