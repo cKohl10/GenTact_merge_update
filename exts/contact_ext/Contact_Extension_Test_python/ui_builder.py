@@ -233,7 +233,7 @@ class UIBuilder:
             # Add a 'Go Back' option at the end of the list
             options.append("Go Back")
         except:
-            options = []
+            options = ["", "Go Back"]
 
         return options
 

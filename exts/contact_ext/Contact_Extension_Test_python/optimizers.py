@@ -73,6 +73,13 @@ class ShaveUnusedHeuristic(AbstractHeuristic):
             for sensor in sensors:
                 f.write(','.join(sensor))
 
+class InterpolateHeatmapHeuristic(AbstractHeuristic):
+    def __init__(self):
+        self.name = "Interpolate Heatmap"
+
+    def apply_heuristic(self, vertices_path, metric_csv_path, output_csv_path):
+        # This heuristic will assign a weight to all vertices and normalize to create a heatmap
+        pass
 
 # Make sure to add all new heuristic classes to the heruistic tracker list
 class HeuristicTracker:
