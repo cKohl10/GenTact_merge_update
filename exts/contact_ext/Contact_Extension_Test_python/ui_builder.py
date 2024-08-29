@@ -10,6 +10,7 @@
 
 from .AbstracSensorClass import AbstractSensorOperator
 from .ContactSensorClass import ContactSensorOperator
+from .ProximitySensorClass import ProximitySensorOperator
 
 import numpy as np
 import omni.timeline
@@ -49,6 +50,7 @@ class UIBuilder:
 
         ############### Add Sensor Operators Here ################
         self._sensor_operators.append(ContactSensorOperator()) # Add a contact sensor operator
+        #self._sensor_operators.append(ProximitySensorOperator()) # Proximity Sensors WIP
         #########################################################
     
 
