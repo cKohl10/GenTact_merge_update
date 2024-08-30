@@ -48,17 +48,15 @@ class SensorPanel(bpy.types.Panel):
         obj = context.object
 
         row = layout.row()
-        row.label(text="Save sensors as CSV", icon='EXPORT')
+        row.label(text="Save sensors as CSV", icon='FILE_TICK')
+
+        row = layout.row()
+        row.label(text="Select root prim for faster processing")
 
         row = layout.row()
         row.label(text="Selected root prim: " + obj.name)
         row = layout.row()
         row.prop(obj, "name")
-
-        # Unit Scale Slider
-        row = layout.row()
-        row.label(text="Unit Scale")
-        row.prop(unit_prop, "unit_scale")
 
         # String field for identifying the skin vertex group
         row = layout.row()
@@ -69,13 +67,22 @@ class SensorPanel(bpy.types.Panel):
         row = layout.row()
         row.operator("object.isaac_save_operator")
 
+        # Skin Vertice Save Button
+        row = layout.row()
+        row.operator("object.skin_vertice_save_operator")
+
+        row = layout.row()
+        row.label(text="Export Meshes as STLs", icon='EXPORT')
+
+        # Unit Scale Slider
+        row = layout.row()
+        row.label(text="Unit Scale")
+        row.prop(unit_prop, "unit_scale")
+
         # Alligator Save Button 
         row = layout.row()
         row.operator("object.alligator_save_operator")
 
-        # Skin Vertice Save Button
-        row = layout.row()
-        row.operator("object.skin_vertice_save_operator")
 
         # Apply Skin Button
         # row = layout.row()
