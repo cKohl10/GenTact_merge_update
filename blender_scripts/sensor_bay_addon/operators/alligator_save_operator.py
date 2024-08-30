@@ -323,7 +323,7 @@ class AlligatorSaveOperator(Operator, ExportHelper):
 
     def full_save(self, context):
         # Saves three folders, a unified meshes folder, just the sensors folder, and just the skin folder
-        folder_path = self.filepath + '/meshes'
+        folder_path = self.filepath
         os.makedirs(folder_path, exist_ok=True)
 
         #Jank solution to input socket naming that could potentially be improved
@@ -356,7 +356,7 @@ class AlligatorSaveOperator(Operator, ExportHelper):
         self.save_attribute_to_csv(context, full_folder_path, write=False, option=full_params)
 
         # Save copy of blend file to folder
-        bpy.ops.wm.save_as_mainfile(filepath=self.filepath + '/model.blend')
+        bpy.ops.wm.save_as_mainfile(filepath=folder_path + '/model.blend')
         
     ############################################################
     ##################### Helper Functions #####################
