@@ -48,6 +48,7 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.contact_log = [] # Dictionary to store times a sensor is in contact
         self.save_path = "TactileSim/sensor_configs/tmp_saves" # Path to save the contact log
         self.output_path = "TactileSim/sensor_configs/tmp_saves" # Path to save the optimizer output
+        
         self.heuristic_tracker = HeuristicTracker() # Tracker for the optimizer heuristics
         self.heuristic_name = "" # Name of the heuristic to apply
 
@@ -110,7 +111,7 @@ class ContactSensorOperator(AbstractSensorOperator):
 
         #Import the sensor data from the CSV file
         try:
-            names, positions, normals, radii, parent_paths, data = self.import_csv(path)
+            names, positions, normals, radii, parent_paths, obj_names, data = self.import_csv(path)
             self.parent_paths = parent_paths
             self.remove_sensors() # Second call to ensure all sensors are removed after parent paths are updated
             message += "File opened successfully\n"
@@ -147,7 +148,7 @@ class ContactSensorOperator(AbstractSensorOperator):
             parent_prim = get_current_stage().GetPrimAtPath(parent_paths[i])
 
             # Create the sensor
-            self.create_contact_sensor(parent_paths[i], positions[i], normals[i], radii[i], names[i], parent_prim)
+            self.create_contact_sensor(parent_paths[i], positions[i], normals[i], radii[i], names[i], obj_names[i], parent_prim)
             sensor_count = sensor_count + 1
 
         message += "\nSuccessfully created " + str(sensor_count) + " sensors\n"
@@ -195,11 +196,16 @@ class ContactSensorOperator(AbstractSensorOperator):
             for i in range(len(data)):
                 parent_paths.append(data[i, 8])
 
-            return names, positions, normals, radii, parent_paths, data
+            # Save the original name of the object in blender
+            obj_names = []
+            for i in range(len(data)):
+                obj_names.append(data[i, 9])
+
+            return names, positions, normals, radii, parent_paths, obj_names, data
         except:
             return None
         
-    def create_contact_sensor(self, parent_path, position, normal, radius, name, parent_prim):
+    def create_contact_sensor(self, parent_path, position, normal, radius, name, obj_name, parent_prim):
         # Create the sensor at the specified position
         # Note: the position vector is given relative to the parent's local frame. Effectively translation
         print(f"Sensor {name} Input Normal: ({normal[0]:.2f}, {normal[1]:.2f}, {normal[2]:.2f})")
@@ -242,7 +248,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                 )
 
         # Add the sensor to the list of sensors
-        self.sensors[name] = self.Sensor(name, position, radius, parent_path)
+        self.sensors[name] = self.Sensor(name, position, radius, parent_path, obj_name)
     
     def remove_sensors(self):
         """
@@ -443,6 +449,7 @@ class ContactSensorOperator(AbstractSensorOperator):
                     on_selection_fn=self.heuristic_dropdown_item_selection,
                 )
                 self.wrapped_ui_elements.append(heuristic_dropdown)
+                self.config_pane = CollapsableFrame("Heuristic Configuration", collapsed=False)
                 heuristic_dropdown.repopulate()  # This does not happen automatically, and it triggers the on_selection_fn
 
                 # Apply Heuristic Button
@@ -489,13 +496,13 @@ class ContactSensorOperator(AbstractSensorOperator):
         else:
             with open(self.save_path +"/contact_log.csv", "w") as f:
                 csvwriter = csv.writer(f)
-                csvwriter.writerow(["Sensor Index", "Contact Count", "X Position", "Y Position", "Z Position"])
+                csvwriter.writerow(["Sensor Index", "Contact Count", "X Position", "Y Position", "Z Position", "Object Name"])
                 for i in range(len(self.sensors)):
                     try:
-                        csvwriter.writerow([i, self.contact_log[i], self.sensors[str(i)].position[0], self.sensors[str(i)].position[1], self.sensors[str(i)].position[2]])
+                        csvwriter.writerow([i, self.contact_log[i], self.sensors[str(i)].position[0], self.sensors[str(i)].position[1], self.sensors[str(i)].position[2], self.sensors[str(i)].obj_name])
                     except KeyError:
                         # Handle the case where the sensor does not exist
-                        csvwriter.writerow([i, self.contact_log[i], 0, 0, 0])
+                        csvwriter.writerow([i, self.contact_log[i], 0, 0, 0, ""])
                     except:
                         self._status_report_field.set_text("Error saving data to file\n")
                         return
@@ -592,6 +599,9 @@ class ContactSensorOperator(AbstractSensorOperator):
         # Update the data source string
         self.heuristic_name = item
         self.wrapped_ui_elements[7].set_selection(item)
+
+        # Update the config pane with the new heuristic
+        self.heuristic_tracker.update_config_pane(item, self.config_pane, self.wrapped_ui_elements)
 
     def apply_heuristic_fn(self):
         # Apply the selected heuristic to the sensor data

@@ -45,10 +45,10 @@ class SkinVerticeSaveOperator(Operator, ExportHelper):
 ############################################################
 
     class VertexData:
-        def __init__(self, index, pos, path):
+        def __init__(self, index, pos, obj_name):
             self.index = index
             self.pos = pos
-            self.path = path
+            self.obj_name = obj_name
 
         def __str__(self):
             return f"Index: {self.index}, Pos: {self.pos}"
@@ -97,6 +97,9 @@ class SkinVerticeSaveOperator(Operator, ExportHelper):
                 vertice_data[child.name] = child_vertice_data
                 continue
 
+            # Get world position of child object's origin
+            #origin_pos = child.matrix_world.translation
+
             pos_attribute_data = mesh.attributes[pos_attribute_name].data
 
             # Get path to object
@@ -111,7 +114,7 @@ class SkinVerticeSaveOperator(Operator, ExportHelper):
             #print(f"Found {sensor_counter} sensor positions in object {child.name} under {parent_path}.")
             for vert in vgVerts:
                 pos = pos_attribute_data[vert.index].vector
-                child_vertice_data.append(self.VertexData(vert.index, pos, path))
+                child_vertice_data.append(self.VertexData(vert.index, pos, child.name))
 
                 #print(f"Vertex {vert.index} at ({pos.x:.3f}, {pos.y:.3f}, {pos.z:.3f}) in object {child.name} under {path}.")
 
@@ -160,11 +163,11 @@ class SkinVerticeSaveOperator(Operator, ExportHelper):
         # Save the attribute data to CSV
         with open(file_path, 'w', newline='') as csvfile:
             csv_writer = csv.writer(csvfile)
-            csv_writer.writerow(['Index', 'X', 'Y', 'Z', 'Parent'])
+            csv_writer.writerow(['Index', 'X', 'Y', 'Z', 'Object Name'])
             
             for i, element in enumerate(vertice_data):
                 pos = element.pos
-                csv_writer.writerow([i, pos.x, pos.y, pos.z, element.path])
+                csv_writer.writerow([element.index, pos.x, pos.y, pos.z, element.obj_name])
         
         # print(f"\nAttribute {attribute_name} saved to {file_path}")
         print(f"Vertice count: {len(vertice_data)}")

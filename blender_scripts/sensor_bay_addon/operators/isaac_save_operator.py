@@ -44,11 +44,12 @@ class IsaacSaveOperator(Operator, ExportHelper):
 ############################################################
 
 class SensorData:
-    def __init__(self, pos, normal, radius, parent):
+    def __init__(self, pos, normal, radius, parent, obj_name):
         self.pos = pos
         self.normal = normal
         self.radius = radius
         self.parent = parent
+        self.obj_name = obj_name
 
     def __str__(self):
         return f"Pos: {self.pos}, Radius: {self.radius}, Parent: {self.parent}"
@@ -153,9 +154,9 @@ def check_children_for_sensors(obj, parent_path):
         for i in range(len(pos_attribute_data)):
             if is_sensor_data[i].value:
                 if default_radius:
-                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, normal_attribute_data[i].vector, 0.1, parent_path))
+                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, normal_attribute_data[i].vector, 0.1, parent_path, child.name))
                 else:
-                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, normal_attribute_data[i].vector, rad_attribute_data[i].value, parent_path))
+                    child_sensor_data.append(SensorData(pos_attribute_data[i].vector, normal_attribute_data[i].vector, rad_attribute_data[i].value, parent_path, child.name))
 
                 sensor_counter = sensor_counter + 1
 
@@ -206,12 +207,12 @@ def save_attribute_to_csv(context, file_path):
     # Save the attribute data to CSV
     with open(file_path, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
-        csv_writer.writerow(['Index', 'X', 'Y', 'Z', 'NormX', 'NormY', 'NormZ', 'Radius', 'Parent'])
+        csv_writer.writerow(['Index', 'X', 'Y', 'Z', 'NormX', 'NormY', 'NormZ', 'Radius', 'Parent', 'Object Name in Blender'])
         
         for i, element in enumerate(sensor_data):
             pos = element.pos
             norm = element.normal
-            csv_writer.writerow([i, pos.x, pos.y, pos.z, norm.x, norm.y, norm.z, element.radius, element.parent])
+            csv_writer.writerow([i, pos.x, pos.y, pos.z, norm.x, norm.y, norm.z, element.radius, element.parent, element.obj_name])
     
     # print(f"\nAttribute {attribute_name} saved to {file_path}")
     print(f"Sensor count: {len(sensor_data)}")
