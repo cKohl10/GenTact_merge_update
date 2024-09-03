@@ -10,8 +10,6 @@ import re
 import os
 import bpy.props
 import numpy as np
-import networkx as nx
-from itertools import permutations
 from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty
 from bpy.types import Operator

@@ -58,12 +58,13 @@ class ContactSensorOperator(AbstractSensorOperator):
 
     # Data structure to store sensor information
     class Sensor:
-        def __init__(self, name, position, radius, parent_path):
+        def __init__(self, name, position, radius, parent_path, obj_name):
             self.name = name
             self.position = position
             self.radius = radius
             self.parent_path = parent_path
             self.path = parent_path + "/tact_sensor_" + name
+            self.obj_name = obj_name
 
     def import_sensors_fn(self):
         """

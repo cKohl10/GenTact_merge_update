@@ -43,7 +43,7 @@ class ImportHeatmapOperator(Operator, ExportHelper):
 
     def execute(self, context):
         print("ImportHeatmapOperator.execute called\n")
-        self.vx_group_name = context.scene.my_addon_properties.group_name
+        self.vx_group_name = context.scene.my_addon_properties.group_name_import
         if self.filepath:  # Check if filepath has been set
             self.apply_heatmap(context)
         else:
@@ -69,30 +69,30 @@ class ImportHeatmapOperator(Operator, ExportHelper):
         for child in obj.children:
             self.traverse_children(child, parent_path)
 
-            # Check if the child is not in vertex_dict
-            if child.name not in self.vertex_dict:
-                #print(f"Could not find {child.name} in vertex_dict")
-                continue
+        # Check if the child is not in vertex_dict
+        if obj.name not in self.vertex_dict:
+            #print(f"Could not find {child.name} in vertex_dict")
+            return
 
-            # Check if the child has a node placement vertex group
-            if not child.vertex_groups.get(self.vx_group_name):
-                print(f"Vertex group {self.vx_group_name} not found in {child.name}, creating it")
-                
-                # If not, create the vertex group
-                child.vertex_groups.new(name=self.vx_group_name)
+        # Check if the child has a node placement vertex group
+        if not obj.vertex_groups.get(self.vx_group_name):
+            print(f"Vertex group {self.vx_group_name} not found in {obj.name}, creating it")
+            
+            # If not, create the vertex group
+            obj.vertex_groups.new(name=self.vx_group_name)
 
-            # Apply the weights to the vertices
-            vertex_set = self.vertex_dict[child.name]
-            vxg = child.vertex_groups.get(self.vx_group_name)
-            change_count = 0
-            for v in vertex_set:
-                try:
-                    vxg.add([v.index], v.weight, 'REPLACE')
-                    change_count += 1
-                except:
-                    print(f"Missing vertex! {v.index} not found in {child.name}! Has the geometry changed?")
+        # Apply the weights to the vertices
+        vertex_set = self.vertex_dict[obj.name]
+        vxg = obj.vertex_groups.get(self.vx_group_name)
+        change_count = 0
+        for v in vertex_set:
+            try:
+                vxg.add([v.index], v.weight, 'REPLACE')
+                change_count += 1
+            except:
+                print(f"Missing vertex! {v.index} not found in {obj.name}! Has the geometry changed?")
 
-            print(f"Modified {change_count} vertice weights in {child.name}")
+        print(f"Modified {change_count} vertice weights in {obj.name}")
 
     def import_csv(self):
 
@@ -100,6 +100,7 @@ class ImportHeatmapOperator(Operator, ExportHelper):
 
         # Open the CSV file
         data = np.genfromtxt(self.filepath, delimiter=',', skip_header=1, dtype=str)
+        self.vertex_dict = {}
 
         # Group all the vertices with the same object name together in an array of VertexData objects
         for row in data:

@@ -27,7 +27,13 @@ class MyAddonProperties(bpy.types.PropertyGroup):
         max=1000000.0
     )
 
-    group_name: bpy.props.StringProperty(
+    group_name_import: bpy.props.StringProperty(
+        name="",
+        description="Name of the skin vertex group",
+        default="Group"
+    )
+
+    group_name_export: bpy.props.StringProperty(
         name="",
         description="Name of the skin vertex group",
         default="Group"
@@ -61,7 +67,7 @@ class SensorPanel(bpy.types.Panel):
         # String field for identifying the skin vertex group
         row = layout.row()
         row.label(text="Skin Vertex Group")
-        row.prop(unit_prop, "group_name")
+        row.prop(unit_prop, "group_name_export")
 
         # Isaac Save Button 
         row = layout.row()
@@ -107,7 +113,7 @@ class ImportPanel(bpy.types.Panel):
         # String field for identifying the node placement vertex group
         row = layout.row()
         row.label(text="Sensor Vertex Group")
-        row.prop(unit_prop, "group_name")
+        row.prop(unit_prop, "group_name_import")
 
         # Apply Heatmap Button
         row = layout.row()

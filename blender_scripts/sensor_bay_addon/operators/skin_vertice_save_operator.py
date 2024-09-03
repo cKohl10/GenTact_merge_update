@@ -28,7 +28,7 @@ class SkinVerticeSaveOperator(Operator, ExportHelper):
     
     def execute(self, context):
         print("SkinVerticeSaveOperator.execute called\n")
-        self.skin_group_name = context.scene.my_addon_properties.group_name
+        self.skin_group_name = context.scene.my_addon_properties.group_name_export
         if self.filepath:  # Check if filepath has been set
             self.save_attribute_to_csv(context, self.filepath)
         else:
@@ -77,6 +77,13 @@ class SkinVerticeSaveOperator(Operator, ExportHelper):
             # Ensure the object has geometry nodes modifier
             if child.modifiers.get('Skin') is None:
                 #print(f"{child.name} does not have a Skin modifier.")
+                # Add the child sensor data to the sensor data list
+                vertice_data[child.name] = child_vertice_data
+                continue
+
+            # Check if the vertex group exists
+            if self.skin_group_name not in child.vertex_groups:
+                #print(f"Vertex group {self.skin_group_name} not found in object {child.name}.")
                 # Add the child sensor data to the sensor data list
                 vertice_data[child.name] = child_vertice_data
                 continue

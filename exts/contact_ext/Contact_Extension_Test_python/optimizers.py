@@ -99,8 +99,8 @@ class ShaveUnusedHeuristic(AbstractHeuristic):
 class InterpolateHeatmapHeuristic(AbstractHeuristic):
     def __init__(self):
         self.name = "Interpolate Heatmap"
-        self.bw_coeff = 1.0
-        self.act_dist_factor = 0.5
+        self.bw_coeff = 2.0
+        self.act_dist = 0.5 # in meters
         self.wrapped_ui_elements = []
 
     class VertexData:
@@ -116,22 +116,21 @@ class InterpolateHeatmapHeuristic(AbstractHeuristic):
         
         # Import the metric data (contact count)
         # In the format of [Index, Contact Count, X, Y, Z, Object Name]
-        metric_data = self.import_csv(metric_csv_path)
+        metric_data = self.import_metric_csv(metric_csv_path)
 
         # Import the vertices data
         # In the format of [Index, X, Y, Z, Object Name]
-        vertices_data = self.import_csv(vertices_path)
+        vertices_data = self.import_vertices_csv(vertices_path)
 
         # Loop through the vertices and add a weight to each vertex based on the contact count
         # Each assigned weight will first pass through a filter that contrsaints the weight to a range of 0 to 1
-        new_vertices = self.filter(vertices_data, metric_data)
+        new_vertices = self.BW_filter(vertices_data, metric_data)
 
         # Export the output data
         self.export_output_csv(output_csv_path, new_vertices)
         
-    def filter(self, vertices, metrics):
+    def BW_filter(self, vertices, metrics):
         # Example filter of weights based on contact count
-        max_dist = {}
         max_weight = {}
 
         for v in vertices:
@@ -139,27 +138,19 @@ class InterpolateHeatmapHeuristic(AbstractHeuristic):
                 if v.obj_name == m.obj_name: # Only apply weights where the names match
                     distance = Gf.Vec3f(v.pos - m.pos).GetLength()
 
-                    # Calculate the maximum distance between the vertices
-                    if v.obj_name not in max_dist:
-                        max_dist[v.obj_name] = distance
-                    elif distance > max_dist[v.obj_name]:
-                        max_dist[v.obj_name] = distance
+                    v.weight = np.maximum(v.weight, np.sqrt(float(m.contact_count)/ (1+np.abs((1/(self.act_dist)) * distance) ** (2*self.bw_coeff)))) # Low Pass Butterworth Filter
 
-        for v in vertices:
-            for m in metrics:
-                if v.obj_name == m.obj_name: # Only apply weights where the names match
-                    distance = Gf.Vec3f(v.pos - m.pos).GetLength()
-
-                    v.weight += 1 / np.sqrt(1+np.abs((1/(self.act_dist_factor * max_dist[v.obj_name])) * distance)^(2*self.bw_coeff)) # Low Pass Butterworth Filter
+                    #print(f"Comparing V{v.index} and M{m.index} with distance {distance}: Weight = {v.weight}")
 
                     if v.obj_name not in max_weight:
                         max_weight[v.obj_name] = v.weight
                     elif v.weight > max_weight[v.obj_name]:
                         max_weight[v.obj_name] = v.weight
 
-        # Normalize the weights
+        #Normalize the weights
         for v in vertices:
-            v.weight = v.weight / max_weight[v.obj_name]
+            v.weight = (v.weight / max_weight[v.obj_name])
+            #v.weight = np.clip(v.weight, 0, 1)
 
         return vertices
 
@@ -186,9 +177,9 @@ class InterpolateHeatmapHeuristic(AbstractHeuristic):
     def export_output_csv(self, path, new_vertices):
         # Outputs a heatmap of the vertices
         with open(path, 'w') as f:
-            f.write('Index, Weight, Object Name')
+            f.write('Index, Weight, Object Name\n')
             for vertex in new_vertices:
-                f.write(f"{vertex.index},{vertex.weight},{vertex.obj_name}")
+                f.write(f"{vertex.index},{vertex.weight},{vertex.obj_name}\n")
     
     def config_pane(self, pane, wrapped_ui_elements):
         print("Configuring Interpolate Heatmap Heuristic Pane")
@@ -196,7 +187,7 @@ class InterpolateHeatmapHeuristic(AbstractHeuristic):
             with ui.VStack(style=get_style(), spacing=5, height=0):
                 self.bw_coeff_field = FloatField(
                     "Butterworth Coefficient", 
-                    default_value=1.0, 
+                    default_value=2.0, 
                     lower_limit=0, 
                     upper_limit=1000,
                     on_value_changed_fn=self.on_bw_coeff_changed
@@ -204,7 +195,7 @@ class InterpolateHeatmapHeuristic(AbstractHeuristic):
                 #wrapped_ui_elements.append(self.bw_coeff_field)
 
                 self.activation_distance_field = FloatField(
-                    "Activation Distance Factor",
+                    "Activation Distance (m)",
                     default_value=0.5,
                     lower_limit=0,
                     upper_limit=1, 
@@ -215,7 +206,7 @@ class InterpolateHeatmapHeuristic(AbstractHeuristic):
         self.bw_coeff = value
 
     def on_act_dist_factor_changed(self, value):
-        self.act_dist_factor = value
+        self.act_dist = value
 
 # Make sure to add all new heuristic classes to the heruistic tracker list
 class HeuristicTracker:
