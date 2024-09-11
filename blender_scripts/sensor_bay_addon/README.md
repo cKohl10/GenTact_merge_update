@@ -30,6 +30,7 @@ Make sure to adjust the the *Voxel Size* attribute to conserve important dimensi
 <br/>
 
 2) **Debugging Save Errors**: If the save button in the add-on are not correctly identifying your sensors, there are a couple common problems you shoud check. You can see a full breakdown of what the save buttons are doing by opening Blender in a terminal. Here is an example output of the save button being used on a Franka arm with 11 sensors:![Alt Text](demos/debug.png) <br/>
-   1) **Common Error: Incorrect Naming**: The save buttons sweep through all objects with a **Skin** geometry nodes modifier enabled. If your geometry node is not named *Skin*, it will not find it.
+   1) **Common Error: Incorrect Naming**: The save buttons sweep through all objects with a **Skin** geometry nodes modifier enabled. If your geometry node is not named *Skin* or a duplicate of it (i.e *Skin.001*), the save process will not find it.
    2) **Common Error: Incorrect Object Selected**: The save buttons sweep down all children of the selected object in the Blender scene for skin modifiers. Make sure the root object of the robot is selected. 
+   3) **Common Error: Incorrect Sensor Positions**: If you need the output of sensor locations in world coordinates for printing, make sure the object origin is set to the world origin and all transforms have been applied.
 

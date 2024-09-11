@@ -159,6 +159,8 @@ class InterpolateHeatmapHeuristic(AbstractHeuristic):
         metric_data = []
 
         for row in data:
+            if float(row[1]) == 0:
+                continue
             md = self.VertexData(row[0], contact_count=row[1], pos=Gf.Vec3f(float(row[2]), float(row[3]), float(row[4])), obj_name=row[5])
             metric_data.append(md)
 

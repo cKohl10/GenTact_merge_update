@@ -68,7 +68,11 @@ class AlligatorSaveOperator(Operator, ExportHelper):
             # Recursively check the children for sensors
             child_sensor_data = self.check_children_for_sensors(child, parent_path, folder_path, options, write=write)
 
-            modifier = child.modifiers.get('Skin')
+            modifier = None
+            for mod in child.modifiers:
+                if re.match(r'Skin(\.\d{3})?$', mod.name):
+                    modifier = mod
+                    break
 
             # Ensure the object has geometry nodes modifier
             if modifier is None:
@@ -159,26 +163,37 @@ class AlligatorSaveOperator(Operator, ExportHelper):
 
             # Add the alligator clip data to the sensor data list as the first element
             # The alligator clips will sandwich the sensor data to complete the node loop
+
+            sensor_pos_data = []
+            sensor_rad_data = []
+            stem_pos_data = []
+            for i in range(len(pos_attribute_data)):
+                if is_sensor_data[i].value:
+                    sensor_pos_data.append(pos_attribute_data[i])
+                    sensor_rad_data.append(rad_attribute_data[i])
+                    if use_stem:
+                        stem_pos_data.append(mesh.attributes[stem_pos_attribute_name].data[i])
+
             if len(clip_pos) > 0 and write:
                 print(f"Sorting object {child.name} by distance from first clip.")
-                sorted_ids = sort(pos_attribute_data, clip_pos[0].pos) # Sort by Distance from first clip
+                print(f"# Sensors sorting: {len(sensor_pos_data)}")
+                sorted_ids = sort(sensor_pos_data, clip_pos[0].pos) # Sort by Distance from first clip
                 child_sensor_data.append(clip_pos[0])
             else:
-                sorted_ids = range(len(pos_attribute_data)) #Original order
+                sorted_ids = range(len(sensor_pos_data)) #Original order
             
             # Add the attribute data to the sensor data list
             sensor_counter = 0
             for i in sorted_ids:
-                if is_sensor_data[i].value:
-                    if default_radius:
-                        child_sensor_data.append(SensorData(pos_attribute_data[i].vector, 0.1, parent_path, name=child.name))
+                if default_radius:
+                    child_sensor_data.append(SensorData(sensor_pos_data[i].vector, 0.1, parent_path, name=child.name))
+                else:
+                    if use_stem:
+                        child_sensor_data.append(SensorData(sensor_pos_data[i].vector, sensor_rad_data[i].value, parent_path, name=child.name, stem_pos=stem_pos_data[i].vector))
                     else:
-                        if use_stem:
-                            child_sensor_data.append(SensorData(pos_attribute_data[i].vector, rad_attribute_data[i].value, parent_path, name=child.name, stem_pos=mesh.attributes[stem_pos_attribute_name].data[i].vector))
-                        else:
-                            child_sensor_data.append(SensorData(pos_attribute_data[i].vector, rad_attribute_data[i].value, parent_path, name=child.name, stem_pos=pos_attribute_data[i].vector))
+                        child_sensor_data.append(SensorData(sensor_pos_data[i].vector, sensor_rad_data[i].value, parent_path, name=child.name, stem_pos=sensor_pos_data[i].vector))
 
-                    sensor_counter = sensor_counter + 1
+                sensor_counter = sensor_counter + 1
 
             #print(f"Found {sensor_counter} sensor positions in object {child.name} under {parent_path}.")
 
@@ -349,12 +364,12 @@ class AlligatorSaveOperator(Operator, ExportHelper):
         full_params = Params(sockets, [True, True, True, False, False])
 
         self.save_attribute_to_csv(context, skin_folder_path, write=False, option=skin_params)
-        self.save_attribute_to_csv(context, sensor_folder_path, write=True, option=sensor_params)
+        self.save_attribute_to_csv(context, sensor_folder_path, write=False, option=sensor_params)
         self.save_attribute_to_csv(context, uni_folder_path, write=False, option=uni_params)
-        self.save_attribute_to_csv(context, full_folder_path, write=False, option=full_params)
+        self.save_attribute_to_csv(context, full_folder_path, write=True, option=full_params)
 
         # Save copy of blend file to folder
-        bpy.ops.wm.save_as_mainfile(filepath=folder_path + '/model.blend')
+        bpy.ops.wm.save_as_mainfile(filepath=folder_path + '/model.blend', copy=True)
         
     ############################################################
     ##################### Helper Functions #####################
