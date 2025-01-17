@@ -4,15 +4,15 @@ This extension has been tested on **Isaac Sim verison 4.0.0**. Using other versi
 
   1: ROS 2 Bridge extension (Humble) must be enabled for this extension to load. In-depth guide on enabling the ROS 2 Bridge extension is [found here](https://docs.omniverse.nvidia.com/isaacsim/latest/installation/install_ros.html#isaac-ros-workspace).
 
-  2: **[tactile_msgs ROS Package:](https://https://github.com/cKohl10/tactile_msgs)** Needed for sending custom ROS messages and services. Follow the install directions [found here](https://https://github.com/cKohl10/tactile_msgs).
+  2: **[tactile_msgs ROS Package:](https://github.com/cKohl10/tactile_msgs)** Needed for sending custom ROS messages and services. Follow the install directions [found here](https://github.com/cKohl10/tactile_msgs).
 
-  3: (Optional) [tactile_examples ROS Package](https://https://github.com/cKohl10/tactile_examples) : Contains many instantiable nodes and topics that are useful for debugging and connecting with external hardware.
+  3: (Optional) [tactile_examples ROS Package](https://github.com/cKohl10/tactile_examples) : Contains many instantiable nodes and topics that are useful for debugging and connecting with external hardware.
 
 # To add the Contact Extension to Isaac Sim:
 
   1: Open the extensions window, *Window* > *Extensions*.
 
-  2: Add the path to extenstions in the *Extension Search Paths* window in the form `/TactileSim/exts`.
+  2: Add the path to extenstions in the *Extension Search Paths* window in the form `../TactileSim/exts`.
 
   3: Under *Third Party* in the extenstions window, toggle the **Contact Extension**. It is recommended to also enable autoloading to skip this process upon reopening Isaac Sim.
   
