@@ -1,6 +1,9 @@
 # Blender Tactile Sensor Bay Add-on
 The blender tactile sensor bay addon is a tool made for procedurally generating variable density 3D printed tactile skins. This tool was designed to streamline the process of making large-scale coverage tactile sensor arrays.
 
+# Installation
+This addon was tested on Blender 4.1.1. Note, the way that geometry nodes are handled after Blender 4.1.1 has changed, restricting the skin from being imported to Isaac sim or saved as a csv file. 
+
 # Importing the Add-on:
 ![Alt Text](demos/install_addon.gif)
 1) Either clone this repo or download **sensor_bay_addon.zip** under the *blender_scripts* folder.
@@ -9,13 +12,19 @@ The blender tactile sensor bay addon is a tool made for procedurally generating 
 4) In the search bar in the preferences window, search for **Tactile Sensor Bay** and enable the add-on. If the add-on does not show up, make sure the *Enabled Add-ons Only* button is not on.
 
 # Dependancies:
-If your version of blender does not include numpy or networkx, run this script in administrator mode through the scripting console
+If your version of blender does not include numpy or networkx, run this script in administrator mode through the scripting console in blender.
 `import sys`
 `import pip`
 `pip.main(['install', 'numpy', '--target', (sys.exec_prefix) + '\\lib\\site-packages'])`
 `pip.main(['install', 'networkx', '--target', (sys.exec_prefix) + '\\lib\\site-packages'])`
 
 # Applying the Skin Geometry Node:
+The skin geometry node is a custom node group that is used to apply the skin to the robot. It is located in the *Assets* folder of the addon.
+You must have the *gemoetry_nodes.blend* file in your assets path in blender for the skin geometry node to be available. To add the skin geometry node to your asset path:
+1) In preferences, navigate to the *File Paths* tab.
+2) In the *Asset Libraries* section, click the plus sign to add a new asset library.
+3) Set the path to the source code of this repository, specifically on the *sensor_bay_addon* folder. Ex: `/home/usr/GenTact/blender_scripts/sensor_bay_addon`
+4) Now the *Skin* geometry node should be available in the *Asset Browser* under the *sensor_bay_addon* folder!
 ![Alt Text](demos/skin_overview.gif)
 
 
