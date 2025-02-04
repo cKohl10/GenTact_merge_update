@@ -7,6 +7,6 @@ This toolbox was designed to quickly and effeciently create configurable tactile
 Detailed instructions can be found in the [Contact Extension README](exts)
 ![Alt Text](demos/Isaac_Sim/tact_sim_franka_demo.gif)
 
-# Contact Sensor Painter:
+# Blender Procedural Generation Tool:
 Detailed instructions can be found in the [Blender Sensor Bay Addon](blender_scripts/sensor_bay_addon)
 ![Alt Text](demos/blender/sensor_paint_demo.gif)
