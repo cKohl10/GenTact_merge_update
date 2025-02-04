@@ -1,6 +1,0 @@
-SensorNum,RelX,RelY,RelZ,Radius,path
-0,0,0,0,0.6,/Ant/Sphere
-1,0,0,0,0.12,/Ant/Arm_01/Upper_Arm
-2,0,0,0,0.12,/Ant/Arm_02/Upper_Arm
-3,0,0,0,0.12,/Ant/Arm_03
-
