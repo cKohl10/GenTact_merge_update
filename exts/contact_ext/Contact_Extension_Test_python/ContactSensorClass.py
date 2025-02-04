@@ -46,8 +46,8 @@ class ContactSensorOperator(AbstractSensorOperator):
         self.ROS_enabled = False # Flag to determine if the ROS node is connected
         self.rotation_count = 0.0 # Counter to keep track of the number of rotations
         self.contact_log = [] # Dictionary to store times a sensor is in contact
-        self.save_path = "TactileSim/sensor_configs/tmp_saves" # Path to save the contact log
-        self.output_path = "TactileSim/sensor_configs/tmp_saves" # Path to save the optimizer output
+        self.save_path = "GenTact/sensor_configs/tmp_saves" # Path to save the contact log
+        self.output_path = "GenTact/sensor_configs/tmp_saves" # Path to save the optimizer output
         
         self.heuristic_tracker = HeuristicTracker() # Tracker for the optimizer heuristics
         self.heuristic_name = "" # Name of the heuristic to apply

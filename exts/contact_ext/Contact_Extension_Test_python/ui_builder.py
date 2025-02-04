@@ -140,7 +140,7 @@ class UIBuilder:
 
                 string_field = StringField(
                     "Import CSV File",
-                    default_value="TactileSim/sensor_configs",
+                    default_value="GenTact/sensor_configs",
                     tooltip="Path to sensor positioning file",
                     read_only=False,
                     multiline_okay=False,
