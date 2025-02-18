@@ -43,3 +43,5 @@ Make sure to adjust the the *Voxel Size* attribute to conserve important dimensi
    2) **Common Error: Incorrect Object Selected**: The save buttons sweep down all children of the selected object in the Blender scene for skin modifiers. Make sure the root object of the robot is selected. 
    3) **Common Error: Incorrect Sensor Positions**: If you need the output of sensor locations in world coordinates for printing, make sure the object origin is set to the world origin and all transforms have been applied.
 
+# Alligator Save
+The Alligator Save operator is used to output the full mesh for 3D printing with the alligator clip nodes. This will seperate the mesh into multiple files to be used for printing in multiple materials. A camera is used to render a preview, so you may run into an error if you don't have any cameras in your scene.
