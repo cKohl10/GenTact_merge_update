@@ -2,3 +2,5 @@ sensor_configs/
 scenes/
 test_scripts/
 videos/
+releases/
+.env/
