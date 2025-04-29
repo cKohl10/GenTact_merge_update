@@ -1,5 +1,7 @@
-demos/
 sensor_configs/
 scenes/
 test_scripts/
 videos/
+releases/
+procedural_skin_addon/modifiers/
+.env/
