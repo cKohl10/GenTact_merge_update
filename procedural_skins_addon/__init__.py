@@ -1,12 +1,12 @@
 bl_info = {
-    "name": "Tactile Sensor Bay",
+    "name": "Procedural Skins",
     "author": "Carson Kohlbrenner",
-    "version": (1, 14),
+    "version": (1, 17),
     "blender": (2, 80, 0),
-    "location": "Object > Sensor Import/Export",
+    "location": "Object > Skin Import/Export",
     "description": "Paint on tactile sensors over a surface and save them for Isaac Sim",
     "warning": "",
-    "doc_url": "https://github.com/cKohl10/TactileSim",
+    "doc_url": "https://github.com/HIRO-group/GenTact",
     "category": "Object",
 }
 

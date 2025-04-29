@@ -2,7 +2,7 @@
 
 [![arXiv](https://img.shields.io/badge/arXiv-2412.00711-df2a2a.svg?style=for-the-badge)](https://arxiv.org/abs/2412.00711)
 [![Isaac Sim Extension](https://img.shields.io/badge/Isaac%20Sim%20Extension-4.0.0%20-76B900?style=for-the-badge)](isaac_contact_ext/README.md)
-[![Blender Add-on](https://img.shields.io/badge/Blender%20Add--on-4.1%20-EA7600?style=for-the-badge)](procedural_skins_addon/README.md)
+[![Blender Add-on](https://img.shields.io/badge/Blender%20Add--on-4.4.1%20-EA7600?style=for-the-badge)](procedural_skins_addon/README.md)
 <!-- [![License](https://img.shields.io/github/license/TRI-ML/prismatic-vlms?style=for-the-badge)](LICENSE) -->
  
 [**Website**](https://hiro-group.ronc.one/gentacttoolbox) | [**Getting Started**](#getting-started) | [**Making Your First Skin**](#making-your-first-skin) | [**Tips and Tricks**](#tips-and-tricks) | [**More Modalities**](#more-modalities)
@@ -12,7 +12,7 @@
 Procedural skins are a new class of artificial skins for robotic applications designed to be form-fitting and highly customizable to individual robots and use-cases. Procedural skins utilize a CAD model of a robot to automatically generate sensors with directely tunable parameters such as sensor density and sensing coverage are directly tunable.
 
 # Prerequisites
-Procedural skins are designed in [Blender](https://www.blender.org/download/releases/4-1/), then can be optimized or deployed in simulation through [Isaac Sim](https://developer.nvidia.com/isaac/sim). Please refer to the [original paper](https://arxiv.org/abs/2412.00711) for more information on fabrication.
+Procedural skins are designed in [Blender](https://www.blender.org/download/releases/4-1/), then can be optimized or deployed in simulation through [Isaac Sim](https://developer.nvidia.com/isaac/sim). The procedural skins developed here use [RC delay capacitive sensing](https://sandrabae.github.io/sensing-network/index.html) and are fabricated using multi-material 3D prinitng. Please refer to the [original paper](https://arxiv.org/abs/2412.00711) for more information on fabrication.
 
 # Getting Started
 

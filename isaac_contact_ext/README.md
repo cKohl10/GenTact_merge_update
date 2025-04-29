@@ -35,4 +35,4 @@ This extension has been tested on **Isaac Sim verison 4.0.0**. Using other versi
   6: Click **Update** to recurrsively create contact sensors. The *Sensor Readings* panel should populate with a configurable heatmap representing each sensor in the order of which they were applied.
   - Known Error: If the heatmap is not displaying and data, try saving the robot with the sensors applied and reopening the USD file.
 
-**Trouble Shooting**: Please reach out to carson.kohlbrenner@gmail.com if you encounter problems with this extension. The source code is provided for this extension under *exts > contact_ext > Contact_Extension_Test_Python*.
+**Trouble Shooting**: Please reach out to carson.kohlbrenner@colorado.edu if you encounter problems with this extension. The source code is provided for this extension under *exts > contact_ext > Contact_Extension_Test_Python*.
