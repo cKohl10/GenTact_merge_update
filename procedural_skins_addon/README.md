@@ -17,17 +17,17 @@ If your version of Blender does not include numpy or networkx, run this script i
 
 ## Applying the Skin Geometry Node:
 The skin geometry node is a custom node group that is used to apply the skin to the robot. It is located in the *Assets* folder of the addon.
-You must have the *gemoetry_nodes.blend* file in your assets path in blender for the skin geometry node to be available. To add the skin geometry node to your asset path:
+You must have the *skin_modifiers_bundle.blend* file in your assets path in blender for the skin geometry node to be available. To add the skin geometry node to your asset path:
 1) In preferences, navigate to the *File Paths* tab.
 2) In the *Asset Libraries* section, click the plus sign to add a new asset library.
-3) Set the path to the source code of this repository, specifically on the *sensor_bay_addon* folder. Ex: `/home/usr/GenTact/blender_scripts/sensor_bay_addon`
-4) Now the *Skin* geometry node should be available in the *Asset Browser* under the *sensor_bay_addon* folder!
+3) Set the path to the source code of this repository, specifically on the *procedural_skins_addon* folder. Ex: `/home/usr/GenTact/procedural_skins_addon`
+4) Now the *Skin* geometry nodes should be available in the *Asset Browser* under the *Procedural Skins* folder!
 ![Alt Text](demos/skin_overview.gif)
 
 
 ## Saving Configurations
 ![Alt Text](demos/saving.gif)
-The *Save Sensor Positions* button exports a .csv file contatining the sensor node positions as well as their respective path in the scene. Make sure the root primitive of the robot is selected before clicking the save button. This file is used to import the sensors designed in this environment to the Isaac Sim extension. [Click here](https://github.com/cKohl10/TactileSim/tree/main/exts) to learn more about how to use the [**Isaac Sim Contact Extension**](https://github.com/cKohl10/TactileSim/tree/main/exts) 
+The *Save Sensor Positions* button exports a .csv file contatining the sensor node positions as well as their respective path in the scene. Make sure the root primitive of the robot is selected before clicking the save button. This file is used to import the sensors designed in this environment to the Isaac Sim extension. [Click here](https://github.com/HIRO-group/GenTact/isaac_contact_ext/README.md) to learn more about how to use the **Isaac Sim Contact Extension**
 
 ## Tips and Tricks
 1) **Smooth Edges and Reduce Computation**: The skin modifier gets computationally expensive and has a more difficult time smoothing edges with high resolution models. If your robot file contains many vertices, it may be helpful to perform a **Voxel Remesh** on your robot. This can be done natively in Blender under *Data > Remesh > Voxel Remesh*. 
